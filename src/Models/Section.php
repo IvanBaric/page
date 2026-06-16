@@ -98,8 +98,7 @@ class Section extends Model
         $query->where('is_visible', true);
     }
 
-    #[Scope]
-    protected function type(Builder $query, string $type): void
+    public function scopeType(Builder $query, string $type): void
     {
         $query->where('type', $type);
     }
@@ -181,10 +180,15 @@ class Section extends Model
             return (string) $value;
         }
 
-        $locale ??= app()->getLocale();
+        $locale ??= static::currentLocaleCode();
         $fallback = config('pages.translatable.default_locale') ?: config('app.fallback_locale', 'en');
 
         return (string) ($value[$locale] ?? $value[$fallback] ?? reset($value) ?: '');
+    }
+
+    private static function currentLocaleCode(): string
+    {
+        return corexis_locale_code() ?: config('app.locale', 'en');
     }
 
     private function slugSource(): string

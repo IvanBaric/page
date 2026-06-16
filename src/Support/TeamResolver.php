@@ -2,15 +2,23 @@
 
 namespace IvanBaric\Pages\Support;
 
+use IvanBaric\Corexis\Contracts\TenantResolver;
+
 final class TeamResolver
 {
     public function resolve(): ?int
     {
-        $resolver = config('pages.team_resolver');
+        if (app()->bound(TenantResolver::class)) {
+            $resolver = app(TenantResolver::class);
 
-        if (! is_string($resolver) || ! class_exists($resolver)) {
-            $resolver = config('pages.corexis.team_resolver');
+            if ($resolver->enabled()) {
+                $tenantId = $resolver->id();
+
+                return $tenantId === null ? null : (int) $tenantId;
+            }
         }
+
+        $resolver = config('pages.team_resolver');
 
         if (! is_string($resolver) || ! class_exists($resolver)) {
             return null;

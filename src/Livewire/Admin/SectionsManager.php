@@ -31,8 +31,10 @@ final class SectionsManager extends Component
 
     public function mount(Page $page): void
     {
+        corexis_authorize('pages.sections.manage', $page);
+
         $this->page = $page;
-        $this->locale = app()->getLocale();
+        $this->locale = $this->currentLocaleCode();
         $this->resetForm();
     }
 
@@ -100,6 +102,11 @@ final class SectionsManager extends Component
         $this->description = [$this->locale => ''];
         $this->is_visible = config('pages.defaults.section_visible', true);
         $this->sort_order = 0;
+    }
+
+    private function currentLocaleCode(): string
+    {
+        return corexis_locale_code() ?: config('app.locale', 'en');
     }
 
     /**

@@ -23,6 +23,11 @@ final class PageIndex extends Component
 
     public string $template = '';
 
+    public function mount(): void
+    {
+        corexis_authorize('pages.view');
+    }
+
     public function updatedSearch(): void
     {
         $this->resetPage();

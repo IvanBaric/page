@@ -1,21 +1,32 @@
 <?php
 
+declare(strict_types=1);
+
 namespace IvanBaric\Pages\Actions;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Data\ActionResult;
+use IvanBaric\Pages\Events\PageCreated;
 use IvanBaric\Pages\Models\Page;
 use IvanBaric\Pages\Support\TeamResolver;
 
 final class CreatePageAction
 {
+    use AuthorizesPageActions;
+
     /**
      * @param  array<string, mixed>  $data
      */
     public function handle(array $data): ActionResult
     {
+        if ($result = $this->authorizePageAction('pages.create')) {
+            return $result;
+        }
+
         $validator = Validator::make($data, $this->rules(), attributes: $this->attributes());
 
         if ($validator->fails()) {
@@ -30,7 +41,9 @@ final class CreatePageAction
         }
 
         $model = config('pages.models.page', Page::class);
-        $page = $model::query()->create($data);
+        $page = DB::transaction(static fn (): Page => $model::query()->create($data));
+
+        PageCreated::dispatch($page);
 
         return ActionResult::success(__('Page created.'), $page);
     }

@@ -1,13 +1,20 @@
 <?php
 
+declare(strict_types=1);
+
 namespace IvanBaric\Pages\Actions;
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Data\ActionResult;
+use IvanBaric\Pages\Events\SectionItemUpdated;
 use IvanBaric\Pages\Models\SectionItem;
 
 final class UpdateSectionItemAction
 {
+    use AuthorizesPageActions;
+
     /**
      * @param  array<string, mixed>  $data
      */
@@ -19,15 +26,25 @@ final class UpdateSectionItemAction
             return ActionResult::failure(__('Section item not found.'));
         }
 
+        if ($result = $this->authorizePageAction('pages.sections.manage', $item)) {
+            return $result;
+        }
+
         $validator = Validator::make($data, $this->rules(), attributes: $this->attributes());
 
         if ($validator->fails()) {
             return ActionResult::failure(__('The section item could not be updated.'), $validator->errors());
         }
 
-        $item->fill($validator->validated())->save();
+        $validated = $validator->validated();
+        DB::transaction(static function () use ($item, $validated): void {
+            $item->fill($validated)->save();
+        });
 
-        return ActionResult::success(__('Section item updated.'), $item->refresh());
+        $item->refresh();
+        SectionItemUpdated::dispatch($item);
+
+        return ActionResult::success(__('Section item updated.'), $item);
     }
 
     /**

@@ -1,13 +1,20 @@
 <?php
 
+declare(strict_types=1);
+
 namespace IvanBaric\Pages\Actions;
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Data\ActionResult;
+use IvanBaric\Pages\Events\SectionItemCreated;
 use IvanBaric\Pages\Models\Section;
 
 final class CreateSectionItemAction
 {
+    use AuthorizesPageActions;
+
     /**
      * @param  array<string, mixed>  $data
      */
@@ -19,13 +26,20 @@ final class CreateSectionItemAction
             return ActionResult::failure(__('Section not found.'));
         }
 
+        if ($result = $this->authorizePageAction('pages.sections.manage', $section)) {
+            return $result;
+        }
+
         $validator = Validator::make($data, $this->rules(), attributes: $this->attributes());
 
         if ($validator->fails()) {
             return ActionResult::failure(__('The section item could not be created.'), $validator->errors());
         }
 
-        $item = $section->addItem($validator->validated());
+        $validated = $validator->validated();
+        $item = DB::transaction(static fn () => $section->addItem($validated));
+
+        SectionItemCreated::dispatch($item);
 
         return ActionResult::success(__('Section item created.'), $item);
     }

@@ -116,6 +116,25 @@ return [
         'layout' => 'layouts.app',
     ],
 
+    'permissions' => [
+        [
+            'name' => 'pages',
+            'slug' => 'pages',
+            'label' => 'pages::permissions.group',
+            'description' => 'pages::permissions.description',
+            'icon' => 'file-text',
+            'sort_order' => 20,
+            'items' => [
+                ['name' => 'View', 'slug' => 'view', 'code' => 'pages.view', 'label' => 'pages::permissions.view', 'sort_order' => 10],
+                ['name' => 'Create', 'slug' => 'create', 'code' => 'pages.create', 'label' => 'pages::permissions.create', 'sort_order' => 20],
+                ['name' => 'Update', 'slug' => 'update', 'code' => 'pages.update', 'label' => 'pages::permissions.update', 'sort_order' => 30],
+                ['name' => 'Delete', 'slug' => 'delete', 'code' => 'pages.delete', 'label' => 'pages::permissions.delete', 'sort_order' => 40],
+                ['name' => 'Publish', 'slug' => 'publish', 'code' => 'pages.publish', 'label' => 'pages::permissions.publish', 'sort_order' => 50],
+                ['name' => 'Manage sections', 'slug' => 'manage_sections', 'code' => 'pages.sections.manage', 'label' => 'pages::permissions.sections_manage', 'sort_order' => 60],
+            ],
+        ],
+    ],
+
     'taxonomy' => [
         'enabled' => true,
         'trait' => 'IvanBaric\\Taxonomy\\Concerns\\HasTaxonomies',
@@ -139,7 +158,8 @@ return [
 
     'corexis' => [
         'action_result' => 'IvanBaric\\Corexis\\Data\\ActionResult',
-        'team_resolver' => 'IvanBaric\\Corexis\\Contracts\\TeamResolver',
+        'tenant_resolver' => 'IvanBaric\\Corexis\\Contracts\\TenantResolver',
+        'tenant_column' => 'team_id',
     ],
 
     'features' => [

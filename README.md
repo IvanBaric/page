@@ -161,7 +161,33 @@ $item->setting('size', 'md');
 
 ## Actions
 
-Actions return `IvanBaric\Pages\Data\ActionResult` and avoid UI exceptions for normal validation or lookup failures.
+Actions return `IvanBaric\Pages\Data\ActionResult` and avoid UI exceptions for normal validation or lookup failures. The package result object is kept for backwards compatibility and can be converted to `IvanBaric\Corexis\Data\ActionResult` with `toCorexis()`.
+
+Successful Actions dispatch small domain events after the write path succeeds. Failed validation and lookup results do not dispatch success events.
+
+Current events:
+
+- `PageCreated`
+- `PageUpdated`
+- `PageDeleted`
+- `PagePublished`
+- `PageUnpublished`
+- `PageSectionsReordered`
+- `SectionCreated`
+- `SectionUpdated`
+- `SectionDeleted`
+- `SectionItemsReordered`
+- `SectionItemCreated`
+- `SectionItemUpdated`
+- `SectionItemDeleted`
+
+Standard write flow:
+
+```text
+Livewire Component -> Action -> Pages ActionResult/Corexis ActionResult adapter -> Domain Event -> Listener
+```
+
+Form Object extraction for the Livewire admin forms is still a separate compatibility pass because this package currently targets Livewire 4.
 
 ```php
 $result = app(CreatePageAction::class)->handle([

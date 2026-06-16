@@ -8,6 +8,7 @@
         "illuminate/contracts": "^13.0",
         "illuminate/database": "^13.0",
         "illuminate/support": "^13.0",
+        "ivanbaric/corexis": "^0.1 || ^1.0 || dev-main",
         "livewire/livewire": "^4.0"
     },
     "require-dev": {
@@ -15,6 +16,15 @@
         "pestphp/pest": "^4.0",
         "pestphp/pest-plugin-laravel": "^4.0"
     },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../corexis",
+            "options": {
+                "symlink": true
+            }
+        }
+    ],
     "autoload": {
         "psr-4": {
             "IvanBaric\\Pages\\": "src/"

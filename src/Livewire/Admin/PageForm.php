@@ -35,7 +35,9 @@ final class PageForm extends Component
 
     public function mount(?Page $page = null): void
     {
-        $this->locale = app()->getLocale();
+        corexis_authorize($page?->exists ? 'pages.update' : 'pages.create', $page?->exists ? $page : []);
+
+        $this->locale = $this->currentLocaleCode();
         $this->title = [$this->locale => ''];
         $this->excerpt = [$this->locale => ''];
         $this->content = [$this->locale => ''];
@@ -77,6 +79,11 @@ final class PageForm extends Component
             ->layout(config('pages.admin_ui.layout', 'layouts.app'), [
                 'title' => $this->page?->exists ? __('Edit page') : __('Create page'),
             ]);
+    }
+
+    private function currentLocaleCode(): string
+    {
+        return corexis_locale_code() ?: config('app.locale', 'en');
     }
 
     private function fillFromPage(Page $page): void

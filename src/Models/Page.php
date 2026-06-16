@@ -135,14 +135,12 @@ class Page extends Model
         $teamId === null ? $query->whereNull('team_id') : $query->where('team_id', $teamId);
     }
 
-    #[Scope]
-    protected function status(Builder $query, string $status): void
+    public function scopeStatus(Builder $query, string $status): void
     {
         $query->where('status', $status);
     }
 
-    #[Scope]
-    protected function template(Builder $query, string $template): void
+    public function scopeTemplate(Builder $query, string $template): void
     {
         $query->where('template', $template);
     }
@@ -168,7 +166,7 @@ class Page extends Model
     public static function createHome(array $data = []): self
     {
         return static::query()->create(array_merge([
-            'title' => [app()->getLocale() => __('Home')],
+            'title' => [static::currentLocaleCode() => __('pages::pages.home')],
             'is_home' => true,
         ], $data));
     }
@@ -256,9 +254,14 @@ class Page extends Model
             return (string) $value;
         }
 
-        $locale ??= app()->getLocale();
+        $locale ??= static::currentLocaleCode();
         $fallback = config('pages.translatable.default_locale') ?: config('app.fallback_locale', 'en');
 
         return (string) ($value[$locale] ?? $value[$fallback] ?? reset($value) ?: '');
+    }
+
+    private static function currentLocaleCode(): string
+    {
+        return corexis_locale_code() ?: config('app.locale', 'en');
     }
 }

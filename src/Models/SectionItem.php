@@ -140,10 +140,15 @@ class SectionItem extends Model
             return (string) $value;
         }
 
-        $locale ??= app()->getLocale();
+        $locale ??= static::currentLocaleCode();
         $fallback = config('pages.translatable.default_locale') ?: config('app.fallback_locale', 'en');
 
         return (string) ($value[$locale] ?? $value[$fallback] ?? reset($value) ?: '');
+    }
+
+    private static function currentLocaleCode(): string
+    {
+        return corexis_locale_code() ?: config('app.locale', 'en');
     }
 
     private function slugSource(): string

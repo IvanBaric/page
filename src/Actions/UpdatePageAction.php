@@ -1,15 +1,22 @@
 <?php
 
+declare(strict_types=1);
+
 namespace IvanBaric\Pages\Actions;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Data\ActionResult;
+use IvanBaric\Pages\Events\PageUpdated;
 use IvanBaric\Pages\Models\Page;
 
 final class UpdatePageAction
 {
+    use AuthorizesPageActions;
+
     /**
      * @param  array<string, mixed>  $data
      */
@@ -19,6 +26,10 @@ final class UpdatePageAction
 
         if (! $page) {
             return ActionResult::failure(__('Page not found.'));
+        }
+
+        if ($result = $this->authorizePageAction('pages.update', $page)) {
+            return $result;
         }
 
         $validator = Validator::make($data, $this->rules(), attributes: $this->attributes());
@@ -33,9 +44,14 @@ final class UpdatePageAction
             return ActionResult::failure(__('A home page already exists for this team.'));
         }
 
-        $page->fill($data)->save();
+        DB::transaction(static function () use ($page, $data): void {
+            $page->fill($data)->save();
+        });
 
-        return ActionResult::success(__('Page updated.'), $page->refresh());
+        $page->refresh();
+        PageUpdated::dispatch($page);
+
+        return ActionResult::success(__('Page updated.'), $page);
     }
 
     /**

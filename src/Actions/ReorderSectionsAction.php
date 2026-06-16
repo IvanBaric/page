@@ -1,12 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace IvanBaric\Pages\Actions;
 
+use Illuminate\Support\Facades\DB;
+use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Data\ActionResult;
+use IvanBaric\Pages\Events\PageSectionsReordered;
 use IvanBaric\Pages\Models\Page;
 
 final class ReorderSectionsAction
 {
+    use AuthorizesPageActions;
+
     /**
      * @param  array<int, string>  $sectionUuids
      */
@@ -18,11 +25,20 @@ final class ReorderSectionsAction
             return ActionResult::failure(__('Page not found.'));
         }
 
-        foreach (array_values($sectionUuids) as $position => $uuid) {
-            $page->sections()->where('uuid', $uuid)->update(['sort_order' => $position]);
+        if ($result = $this->authorizePageAction('pages.sections.manage', $page)) {
+            return $result;
         }
 
-        return ActionResult::success(__('Sections reordered.'), $page->refresh());
+        DB::transaction(static function () use ($page, $sectionUuids): void {
+            foreach (array_values($sectionUuids) as $position => $uuid) {
+                $page->sections()->where('uuid', $uuid)->update(['sort_order' => $position]);
+            }
+        });
+
+        $page->refresh();
+        PageSectionsReordered::dispatch($page, array_values($sectionUuids));
+
+        return ActionResult::success(__('Sections reordered.'), $page);
     }
 
     private function findPage(Page|string $page): ?Page
