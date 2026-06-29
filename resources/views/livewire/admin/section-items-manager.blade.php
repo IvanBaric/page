@@ -42,7 +42,7 @@
                         <div class="flex flex-wrap items-center gap-2">
                             <flux:button size="sm" wire:click="edit('{{ $item->uuid }}')">{{ __('Edit') }}</flux:button>
                             <flux:button size="sm" wire:click="toggle('{{ $item->uuid }}')">{{ $item->is_visible ? __('Hide') : __('Show') }}</flux:button>
-                            <flux:button size="sm" variant="danger" wire:confirm="{{ __('Delete this item?') }}" wire:click="delete('{{ $item->uuid }}')">{{ __('Delete') }}</flux:button>
+                            <flux:button size="sm" variant="danger" wire:confirm="{{ __('Arhivirati zapis?') }}" wire:click="archive('{{ $item->uuid }}')">{{ __('Arhiviraj') }}</flux:button>
                         </div>
                     </flux:table.cell>
                 </flux:table.row>

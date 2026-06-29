@@ -7,10 +7,12 @@ use Illuminate\Support\Carbon;
 use IvanBaric\Pages\Actions\CreatePageAction;
 use IvanBaric\Pages\Actions\UpdatePageAction;
 use IvanBaric\Pages\Models\Page;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 
 final class PageForm extends Component
 {
+    #[Locked]
     public ?Page $page = null;
 
     public string $locale = 'en';
@@ -32,6 +34,8 @@ final class PageForm extends Component
     public ?string $published_at = null;
 
     public int $sort_order = 0;
+
+    public ?int $lock_version = null;
 
     public function mount(?Page $page = null): void
     {
@@ -97,6 +101,7 @@ final class PageForm extends Component
         $this->is_published = $page->is_published;
         $this->published_at = $page->published_at?->format('Y-m-d\TH:i');
         $this->sort_order = $page->sort_order;
+        $this->lock_version = method_exists($page, 'getLockVersion') ? $page->getLockVersion() : (int) ($page->lock_version ?? 0);
     }
 
     /**
@@ -114,6 +119,7 @@ final class PageForm extends Component
             'is_published' => $this->is_published,
             'published_at' => $this->published_at ? Carbon::parse($this->published_at) : null,
             'sort_order' => $this->sort_order,
+            'lock_version' => $this->lock_version,
         ];
     }
 }

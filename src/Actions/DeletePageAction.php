@@ -6,17 +6,18 @@ namespace IvanBaric\Pages\Actions;
 
 use Illuminate\Support\Facades\DB;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
+use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
 use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Events\PageDeleted;
 use IvanBaric\Pages\Models\Page;
 
 final class DeletePageAction
 {
-    use AuthorizesPageActions;
+    use AuthorizesPageActions, ResolvesPageModels;
 
     public function handle(Page|string $page): ActionResult
     {
-        $page = $this->findPage($page);
+        $page = $this->resolvePage($page);
 
         if (! $page) {
             return ActionResult::failure(__('Page not found.'));
@@ -30,7 +31,13 @@ final class DeletePageAction
         $uuid = (string) $page->uuid;
 
         DB::transaction(static function () use ($page): void {
-            $page->delete();
+            /** @var Page $lockedPage */
+            $lockedPage = Page::query()
+                ->whereKey($page->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $lockedPage->delete();
         });
 
         PageDeleted::dispatch($pageKey, $uuid);
@@ -38,14 +45,4 @@ final class DeletePageAction
         return ActionResult::success(__('Page deleted.'));
     }
 
-    private function findPage(Page|string $page): ?Page
-    {
-        if ($page instanceof Page) {
-            return $page;
-        }
-
-        $model = config('pages.models.page', Page::class);
-
-        return $model::query()->where('uuid', $page)->first();
-    }
 }

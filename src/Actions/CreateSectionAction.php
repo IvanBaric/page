@@ -8,20 +8,21 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
+use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
 use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Events\SectionCreated;
 use IvanBaric\Pages\Models\Page;
 
 final class CreateSectionAction
 {
-    use AuthorizesPageActions;
+    use AuthorizesPageActions, ResolvesPageModels;
 
     /**
      * @param  array<string, mixed>  $data
      */
     public function handle(Page|string $page, array $data): ActionResult
     {
-        $page = $this->findPage($page);
+        $page = $this->resolvePage($page);
 
         if (! $page) {
             return ActionResult::failure(__('Page not found.'));
@@ -85,14 +86,4 @@ final class CreateSectionAction
         ];
     }
 
-    private function findPage(Page|string $page): ?Page
-    {
-        if ($page instanceof Page) {
-            return $page;
-        }
-
-        $model = config('pages.models.page', Page::class);
-
-        return $model::query()->where('uuid', $page)->first();
-    }
 }

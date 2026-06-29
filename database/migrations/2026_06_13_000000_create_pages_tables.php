@@ -23,6 +23,7 @@ return new class extends Migration
             $table->timestamp('published_at')->nullable()->index();
             $table->unsignedInteger('sort_order')->default(0);
             $table->json('settings')->nullable();
+            $table->unsignedInteger('lock_version')->default(0);
             $table->timestamps();
             $table->softDeletes();
             $table->unique(['team_id', 'slug']);
@@ -45,6 +46,7 @@ return new class extends Migration
             $table->boolean('is_visible')->default(true)->index();
             $table->unsignedInteger('sort_order')->default(0);
             $table->json('settings')->nullable();
+            $table->unsignedInteger('lock_version')->default(0);
             $table->timestamps();
             $table->softDeletes();
             $table->unique(['team_id', 'slug']);
@@ -68,6 +70,7 @@ return new class extends Migration
             $table->boolean('is_visible')->default(true)->index();
             $table->unsignedInteger('sort_order')->default(0);
             $table->json('settings')->nullable();
+            $table->unsignedInteger('lock_version')->default(0);
             $table->timestamps();
             $table->softDeletes();
             $table->unique(['team_id', 'slug']);

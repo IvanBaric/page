@@ -9,12 +9,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use IvanBaric\Corexis\Concerns\HasLockVersion;
 use IvanBaric\Pages\Support\SlugGenerator;
 use IvanBaric\Pages\Support\TeamResolver;
 
 class SectionItem extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes;
+    use HasFactory, HasLockVersion, HasUuids, SoftDeletes;
 
     protected $guarded = ['id'];
 
@@ -44,6 +45,9 @@ class SectionItem extends Model
         });
 
         static::saving(function (self $item): void {
+            $item->team_id ??= $item->section?->team_id ?? app(TeamResolver::class)->resolve();
+            $item->is_visible ??= config('pages.defaults.item_visible', true);
+
             if ($item->section && $item->team_id !== $item->section->team_id) {
                 $item->team_id = $item->section->team_id;
             }
@@ -68,6 +72,7 @@ class SectionItem extends Model
             'is_visible' => 'boolean',
             'sort_order' => 'integer',
             'settings' => 'array',
+            'lock_version' => 'integer',
         ];
     }
 
@@ -115,6 +120,13 @@ class SectionItem extends Model
     public function hide(): bool
     {
         return $this->forceFill(['is_visible' => false])->save();
+    }
+
+    public function archive(): bool
+    {
+        $this->forceFill(['is_visible' => false])->save();
+
+        return (bool) $this->delete();
     }
 
     public function setting(string $key, mixed $default = null): mixed

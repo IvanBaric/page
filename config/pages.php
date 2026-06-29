@@ -47,6 +47,56 @@ return [
         'custom' => ['label' => 'Custom'],
     ],
 
+    'admin_section_definitions' => [],
+
+    'admin_sections' => [],
+
+    'admin_pages' => ['home', 'about', 'products', 'posts', 'gallery', 'contact'],
+
+    'public_slugs' => [],
+
+    'section_editors' => [
+        'default' => 'admin.pages.sections.configured-items-editor',
+    ],
+
+    'admin_index' => [
+        'parts' => ['pages', 'header', 'footer'],
+        'per_page' => 12,
+        'legacy_slugs' => ['o-udruzi'],
+        'system_slugs' => ['header', 'footer'],
+        'singleton_model' => null,
+        'singleton_team_scope' => 'forTeam',
+        'singleton_active_scope' => 'active',
+        'missing_singleton_text' => 'Javna organizacija još nije dostupna za trenutni tim.',
+        'public_route' => [
+            'name' => null,
+            'subject_parameter' => 'organizationSlug',
+            'page_parameter' => 'pageSlug',
+        ],
+        'template_parts' => [
+            'header' => [
+                'definition_key' => 'template_header',
+                'template' => null,
+                'unsupported_text' => 'Za ovaj template još nije definirana Livewire komponenta zaglavlja.',
+            ],
+            'footer' => [
+                'definition_key' => 'template_footer',
+                'template' => null,
+                'unsupported_text' => 'Za ovaj template još nije definirana Livewire komponenta podnožja.',
+            ],
+        ],
+    ],
+
+    'configured_items_editor' => [
+        'actions' => [
+            'save_item' => null,
+            'toggle_item' => null,
+            'reorder_item' => null,
+            'delete_item' => null,
+            'save_section' => null,
+        ],
+    ],
+
     'defaults' => [
         'section_visible' => true,
         'item_visible' => true,
@@ -62,6 +112,13 @@ return [
         'name_prefix' => 'admin.pages.',
         'prefix' => 'admin/pages',
         'middleware' => ['web', 'auth'],
+    ],
+
+    'admin_routes' => [
+        'page_index' => 'admin.pages.index',
+        'page_archive' => 'admin.pages.archive',
+        'page_show' => 'admin.pages.show',
+        'section_show' => 'admin.sections.show',
     ],
 
     'public' => [

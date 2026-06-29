@@ -6,20 +6,21 @@ namespace IvanBaric\Pages\Actions;
 
 use Illuminate\Support\Facades\DB;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
+use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
 use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Events\SectionItemDeleted;
 use IvanBaric\Pages\Models\SectionItem;
 
 final class DeleteSectionItemAction
 {
-    use AuthorizesPageActions;
+    use AuthorizesPageActions, ResolvesPageModels;
 
     public function handle(SectionItem|string $item): ActionResult
     {
-        $item = $this->findItem($item);
+        $item = $this->resolveSectionItem($item);
 
         if (! $item) {
-            return ActionResult::failure(__('Section item not found.'));
+            return ActionResult::failure(__('Zapis nije pronađen.'));
         }
 
         if ($result = $this->authorizePageAction('pages.sections.manage', $item)) {
@@ -30,22 +31,18 @@ final class DeleteSectionItemAction
         $uuid = (string) $item->uuid;
 
         DB::transaction(static function () use ($item): void {
-            $item->delete();
+            /** @var SectionItem $lockedItem */
+            $lockedItem = SectionItem::query()
+                ->whereKey($item->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $lockedItem->archive();
         });
 
         SectionItemDeleted::dispatch($itemKey, $uuid);
 
-        return ActionResult::success(__('Section item deleted.'));
+        return ActionResult::success(__('Zapis je arhiviran.'));
     }
 
-    private function findItem(SectionItem|string $item): ?SectionItem
-    {
-        if ($item instanceof SectionItem) {
-            return $item;
-        }
-
-        $model = config('pages.models.section_item', SectionItem::class);
-
-        return $model::query()->where('uuid', $item)->first();
-    }
 }

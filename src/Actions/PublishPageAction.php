@@ -6,17 +6,18 @@ namespace IvanBaric\Pages\Actions;
 
 use Illuminate\Support\Facades\DB;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
+use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
 use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Events\PagePublished;
 use IvanBaric\Pages\Models\Page;
 
 final class PublishPageAction
 {
-    use AuthorizesPageActions;
+    use AuthorizesPageActions, ResolvesPageModels;
 
     public function handle(Page|string $page): ActionResult
     {
-        $page = $this->findPage($page);
+        $page = $this->resolvePage($page);
 
         if (! $page) {
             return ActionResult::failure(__('Page not found.'));
@@ -27,7 +28,13 @@ final class PublishPageAction
         }
 
         DB::transaction(static function () use ($page): void {
-            $page->publish();
+            /** @var Page $lockedPage */
+            $lockedPage = Page::query()
+                ->whereKey($page->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $lockedPage->publish();
         });
 
         $page->refresh();
@@ -36,14 +43,4 @@ final class PublishPageAction
         return ActionResult::success(__('Page published.'), $page);
     }
 
-    private function findPage(Page|string $page): ?Page
-    {
-        if ($page instanceof Page) {
-            return $page;
-        }
-
-        $model = config('pages.models.page', Page::class);
-
-        return $model::query()->where('uuid', $page)->first();
-    }
 }

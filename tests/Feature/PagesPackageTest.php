@@ -1,7 +1,7 @@
 <?php
 
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Schema;
 use IvanBaric\Corexis\Contracts\TenantResolver;
 use IvanBaric\Corexis\Data\ActionResult as CorexisActionResult;
 use IvanBaric\Pages\Actions\CreatePageAction;
@@ -11,11 +11,19 @@ use IvanBaric\Pages\Actions\PublishPageAction;
 use IvanBaric\Pages\Actions\ReorderSectionItemsAction;
 use IvanBaric\Pages\Actions\ReorderSectionsAction;
 use IvanBaric\Pages\Actions\UnpublishPageAction;
+use IvanBaric\Pages\Actions\UpdatePageAction;
+use IvanBaric\Pages\Admin\Action;
+use IvanBaric\Pages\Admin\AdminSection;
+use IvanBaric\Pages\Admin\AdminSectionRegistry;
+use IvanBaric\Pages\Admin\Field;
+use IvanBaric\Pages\Admin\LayoutVariant;
+use IvanBaric\Pages\Admin\Tab;
 use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Events\PageCreated;
 use IvanBaric\Pages\Events\PagePublished;
 use IvanBaric\Pages\Events\PageSectionsReordered;
 use IvanBaric\Pages\Events\PageUnpublished;
+use IvanBaric\Pages\Events\PageUpdated;
 use IvanBaric\Pages\Events\SectionCreated;
 use IvanBaric\Pages\Events\SectionItemCreated;
 use IvanBaric\Pages\Events\SectionItemsReordered;
@@ -67,6 +75,37 @@ class PagesCorexisTenantResolverFake implements TenantResolver
     }
 }
 
+class PagesTestAdminSectionProvider
+{
+    /** @return array<int, AdminSection> */
+    public function definitions(): array
+    {
+        return [
+            AdminSection::add('testimonials')
+                ->label('Testimonials')
+                ->tabs([
+                    Tab::items('Content')
+                        ->formTitle('Edit testimonial', 'Add testimonial')
+                        ->fields([
+                            Field::text('title')->label('Name')->required(),
+                            Field::textarea('content')->label('Quote')->rows(4)->required(),
+                            Field::image('image')->label('Photo')->size('small'),
+                        ])
+                        ->actions([
+                            Action::edit()->label('Edit'),
+                            Action::delete()->label('Delete'),
+                        ]),
+
+                    Tab::layout('Layout')
+                        ->default('cards')
+                        ->variants([
+                            LayoutVariant::add('cards')->label('Cards'),
+                        ]),
+                ]),
+        ];
+    }
+}
+
 it('boots the package', function (): void {
     expect(config('pages.tables.pages'))->toBe('pages');
 });
@@ -74,6 +113,59 @@ it('boots the package', function (): void {
 it('loads config', function (): void {
     expect(config('pages.templates.classic.label'))->toBe('Classic')
         ->and(config('pages.section_types.hero.label'))->toBe('Hero');
+});
+
+it('defines admin sections through the reusable fluent API', function (): void {
+    $section = AdminSection::add('testimonials')
+        ->label('Testimonials')
+        ->tabs([
+            Tab::items('Content')
+                ->formTitle('Edit testimonial')
+                ->inlineForm(submitLabel: 'Save content')
+                ->fields([
+                    Field::text('title')->label('Name')->required(),
+                    Field::textarea('content')->label('Quote')->rows(4)->required(),
+                ]),
+
+            Tab::layout('Layout')
+                ->default('cards')
+                ->variants([
+                    LayoutVariant::add('cards')->label('Cards'),
+                ]),
+
+            Tab::form('Header', 'header')
+                ->submitLabel('Save header')
+                ->fields([
+                    Field::text('title')->label('Title')->defaultFrom('name'),
+                ]),
+        ]);
+
+    expect($section->key())->toBe('testimonials')
+        ->and($section->itemsTab()?->field('content')?->optionValue('rows'))->toBe(4)
+        ->and($section->itemsTab()?->optionValue('show_sort_order'))->toBeFalse()
+        ->and($section->itemsTab()?->optionValue('modal_flyout'))->toBeTrue()
+        ->and($section->itemsTab()?->optionValue('inline_form'))->toBeTrue()
+        ->and($section->itemsTab()?->optionValue('inline_submit_label'))->toBe('Save content')
+        ->and($section->itemsTab()?->optionValue('single_column'))->toBeTrue()
+        ->and($section->layoutTab()?->variantKeys())->toBe(['cards'])
+        ->and($section->tab('header')?->type())->toBe('form')
+        ->and($section->tab('header')?->optionValue('submit_label'))->toBe('Save header')
+        ->and($section->tab('header')?->field('title')?->optionValue('default_from'))->toBe('name')
+        ->and($section->toArray()['tabs'])->toHaveCount(3);
+});
+
+it('resolves admin section definitions from configured providers', function (): void {
+    config()->set('pages.admin_section_definitions', [
+        PagesTestAdminSectionProvider::class,
+    ]);
+
+    app(AdminSectionRegistry::class)->flush();
+
+    $definition = app(AdminSectionRegistry::class)->get('testimonials');
+
+    expect($definition)->toBeInstanceOf(AdminSection::class)
+        ->and($definition?->labelValue())->toBe('Testimonials')
+        ->and($definition?->itemsTab()?->field('image')?->optionValue('size'))->toBe('small');
 });
 
 it('creates the package tables', function (): void {
@@ -185,6 +277,24 @@ it('section can have items', function (): void {
     ]);
 
     expect($section->items()->first()?->is($item))->toBeTrue();
+});
+
+it('section item slugs stay unique when a previous item was soft deleted', function (): void {
+    $section = Page::query()->create([
+        'title' => ['en' => 'Soft deleted items page'],
+    ])->addSection('features');
+
+    $deleted = $section->addItem([
+        'title' => ['en' => 'A'],
+    ]);
+
+    $deleted->delete();
+
+    $item = $section->addItem([
+        'title' => ['en' => 'A'],
+    ]);
+
+    expect($item->slug)->toBe('a-2');
 });
 
 it('sections are ordered', function (): void {
@@ -347,4 +457,36 @@ it('dispatches domain events for successful section and item actions', function 
     Event::assertDispatched(SectionItemCreated::class);
     Event::assertDispatched(PageSectionsReordered::class);
     Event::assertDispatched(SectionItemsReordered::class);
+});
+
+it('prevents stale page updates through lock version', function (): void {
+    Event::fake([PageUpdated::class]);
+
+    $page = Page::query()->create([
+        'title' => ['en' => 'Original'],
+        'status' => 'draft',
+    ]);
+
+    $result = app(UpdatePageAction::class)->handle($page, [
+        'title' => ['en' => 'Updated'],
+        'status' => 'draft',
+        'lock_version' => 0,
+    ]);
+
+    expect($result->successful)->toBeTrue()
+        ->and($page->refresh()->lock_version)->toBe(1);
+    Event::assertDispatched(PageUpdated::class);
+
+    Event::fake([PageUpdated::class]);
+
+    $stale = app(UpdatePageAction::class)->handle($page->refresh(), [
+        'title' => ['en' => 'Stale'],
+        'status' => 'draft',
+        'lock_version' => 0,
+    ]);
+
+    expect($stale->successful)->toBeFalse()
+        ->and($stale->code)->toBe('conflict.stale_model')
+        ->and($page->refresh()->title)->toBe(['en' => 'Updated']);
+    Event::assertNotDispatched(PageUpdated::class);
 });

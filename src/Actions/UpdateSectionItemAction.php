@@ -6,21 +6,23 @@ namespace IvanBaric\Pages\Actions;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use IvanBaric\Corexis\Concerns\UsesOptimisticLocking;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
+use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
 use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Events\SectionItemUpdated;
 use IvanBaric\Pages\Models\SectionItem;
 
 final class UpdateSectionItemAction
 {
-    use AuthorizesPageActions;
+    use AuthorizesPageActions, ResolvesPageModels, UsesOptimisticLocking;
 
     /**
      * @param  array<string, mixed>  $data
      */
     public function handle(SectionItem|string $item, array $data): ActionResult
     {
-        $item = $this->findItem($item);
+        $item = $this->resolveSectionItem($item);
 
         if (! $item) {
             return ActionResult::failure(__('Section item not found.'));
@@ -37,9 +39,15 @@ final class UpdateSectionItemAction
         }
 
         $validated = $validator->validated();
-        DB::transaction(static function () use ($item, $validated): void {
-            $item->fill($validated)->save();
+        $expectedLockVersion = $this->pullExpectedLockVersion($validated);
+
+        $saved = DB::transaction(function () use ($item, $validated, $expectedLockVersion): bool {
+            return $this->saveWithOptimisticLock($item, $validated, $expectedLockVersion);
         });
+
+        if (! $saved) {
+            return ActionResult::fromCorexis($this->staleModelResult());
+        }
 
         $item->refresh();
         SectionItemUpdated::dispatch($item);
@@ -65,6 +73,7 @@ final class UpdateSectionItemAction
             'is_visible' => ['nullable', 'boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
             'settings' => ['nullable', 'array'],
+            'lock_version' => ['nullable', 'integer', 'min:0'],
         ];
     }
 
@@ -89,14 +98,4 @@ final class UpdateSectionItemAction
         ];
     }
 
-    private function findItem(SectionItem|string $item): ?SectionItem
-    {
-        if ($item instanceof SectionItem) {
-            return $item;
-        }
-
-        $model = config('pages.models.section_item', SectionItem::class);
-
-        return $model::query()->where('uuid', $item)->first();
-    }
 }

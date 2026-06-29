@@ -8,21 +8,23 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use IvanBaric\Corexis\Concerns\UsesOptimisticLocking;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
+use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
 use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Events\PageUpdated;
 use IvanBaric\Pages\Models\Page;
 
 final class UpdatePageAction
 {
-    use AuthorizesPageActions;
+    use AuthorizesPageActions, ResolvesPageModels, UsesOptimisticLocking;
 
     /**
      * @param  array<string, mixed>  $data
      */
     public function handle(Page|string $page, array $data): ActionResult
     {
-        $page = $this->findPage($page);
+        $page = $this->resolvePage($page);
 
         if (! $page) {
             return ActionResult::failure(__('Page not found.'));
@@ -39,14 +41,19 @@ final class UpdatePageAction
         }
 
         $data = $validator->validated();
+        $expectedLockVersion = $this->pullExpectedLockVersion($data);
 
         if (($data['is_home'] ?? false) && $this->homeExists($page, $data['team_id'] ?? $page->team_id)) {
             return ActionResult::failure(__('A home page already exists for this team.'));
         }
 
-        DB::transaction(static function () use ($page, $data): void {
-            $page->fill($data)->save();
+        $saved = DB::transaction(function () use ($page, $data, $expectedLockVersion): bool {
+            return $this->saveWithOptimisticLock($page, $data, $expectedLockVersion);
         });
+
+        if (! $saved) {
+            return ActionResult::fromCorexis($this->staleModelResult());
+        }
 
         $page->refresh();
         PageUpdated::dispatch($page);
@@ -71,6 +78,7 @@ final class UpdatePageAction
             'published_at' => ['nullable', 'date'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
             'settings' => ['nullable', 'array'],
+            'lock_version' => ['nullable', 'integer', 'min:0'],
         ];
     }
 
@@ -91,17 +99,6 @@ final class UpdatePageAction
             'sort_order' => __('sort order'),
             'settings' => __('settings'),
         ];
-    }
-
-    private function findPage(Page|string $page): ?Page
-    {
-        if ($page instanceof Page) {
-            return $page;
-        }
-
-        $model = config('pages.models.page', Page::class);
-
-        return $model::query()->where('uuid', $page)->first();
     }
 
     private function homeExists(Page $page, ?int $teamId): bool

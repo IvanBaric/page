@@ -7,20 +7,21 @@ namespace IvanBaric\Pages\Actions;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
+use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
 use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Events\SectionItemCreated;
 use IvanBaric\Pages\Models\Section;
 
 final class CreateSectionItemAction
 {
-    use AuthorizesPageActions;
+    use AuthorizesPageActions, ResolvesPageModels;
 
     /**
      * @param  array<string, mixed>  $data
      */
     public function handle(Section|string $section, array $data): ActionResult
     {
-        $section = $this->findSection($section);
+        $section = $this->resolveSection($section);
 
         if (! $section) {
             return ActionResult::failure(__('Section not found.'));
@@ -86,14 +87,4 @@ final class CreateSectionItemAction
         ];
     }
 
-    private function findSection(Section|string $section): ?Section
-    {
-        if ($section instanceof Section) {
-            return $section;
-        }
-
-        $model = config('pages.models.section', Section::class);
-
-        return $model::query()->where('uuid', $section)->first();
-    }
 }

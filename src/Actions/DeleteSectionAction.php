@@ -6,20 +6,21 @@ namespace IvanBaric\Pages\Actions;
 
 use Illuminate\Support\Facades\DB;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
+use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
 use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Events\SectionDeleted;
 use IvanBaric\Pages\Models\Section;
 
 final class DeleteSectionAction
 {
-    use AuthorizesPageActions;
+    use AuthorizesPageActions, ResolvesPageModels;
 
     public function handle(Section|string $section): ActionResult
     {
-        $section = $this->findSection($section);
+        $section = $this->resolveSection($section);
 
         if (! $section) {
-            return ActionResult::failure(__('Section not found.'));
+            return ActionResult::failure(__('Sekcija nije pronađena.'));
         }
 
         if ($result = $this->authorizePageAction('pages.sections.manage', $section)) {
@@ -30,22 +31,18 @@ final class DeleteSectionAction
         $uuid = (string) $section->uuid;
 
         DB::transaction(static function () use ($section): void {
-            $section->delete();
+            /** @var Section $lockedSection */
+            $lockedSection = Section::query()
+                ->whereKey($section->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $lockedSection->archive();
         });
 
         SectionDeleted::dispatch($sectionKey, $uuid);
 
-        return ActionResult::success(__('Section deleted.'));
+        return ActionResult::success(__('Sekcija je arhivirana.'));
     }
 
-    private function findSection(Section|string $section): ?Section
-    {
-        if ($section instanceof Section) {
-            return $section;
-        }
-
-        $model = config('pages.models.section', Section::class);
-
-        return $model::query()->where('uuid', $section)->first();
-    }
 }

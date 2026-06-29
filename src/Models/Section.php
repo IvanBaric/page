@@ -10,12 +10,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use IvanBaric\Corexis\Concerns\HasLockVersion;
+use IvanBaric\Gallery\Concerns\HasGalleries;
 use IvanBaric\Pages\Support\SlugGenerator;
 use IvanBaric\Pages\Support\TeamResolver;
 
 class Section extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes;
+    use HasFactory, HasGalleries, HasLockVersion, HasUuids, SoftDeletes;
 
     protected $guarded = ['id'];
 
@@ -45,6 +47,9 @@ class Section extends Model
         });
 
         static::saving(function (self $section): void {
+            $section->team_id ??= $section->page?->team_id ?? app(TeamResolver::class)->resolve();
+            $section->is_visible ??= config('pages.defaults.section_visible', true);
+
             if ($section->page && $section->team_id !== $section->page->team_id) {
                 $section->team_id = $section->page->team_id;
             }
@@ -69,6 +74,7 @@ class Section extends Model
             'is_visible' => 'boolean',
             'sort_order' => 'integer',
             'settings' => 'array',
+            'lock_version' => 'integer',
         ];
     }
 
@@ -136,6 +142,13 @@ class Section extends Model
     public function hide(): bool
     {
         return $this->forceFill(['is_visible' => false])->save();
+    }
+
+    public function archive(): bool
+    {
+        $this->forceFill(['is_visible' => false])->save();
+
+        return (bool) $this->delete();
     }
 
     public function hasItems(): bool

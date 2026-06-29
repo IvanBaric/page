@@ -47,7 +47,7 @@
                             <flux:button size="sm" wire:click="edit('{{ $section->uuid }}')">{{ __('Edit') }}</flux:button>
                             <flux:button size="sm" :href="route(config('pages.admin.name_prefix', 'admin.pages.').'sections.items', ['page' => $page->uuid, 'section' => $section->uuid])" wire:navigate>{{ __('Items') }}</flux:button>
                             <flux:button size="sm" wire:click="toggle('{{ $section->uuid }}')">{{ $section->is_visible ? __('Hide') : __('Show') }}</flux:button>
-                            <flux:button size="sm" variant="danger" wire:confirm="{{ __('Delete this section?') }}" wire:click="delete('{{ $section->uuid }}')">{{ __('Delete') }}</flux:button>
+                            <flux:button size="sm" variant="danger" wire:confirm="{{ __('Arhivirati sekciju?') }}" wire:click="archive('{{ $section->uuid }}')">{{ __('Arhiviraj') }}</flux:button>
                         </div>
                     </flux:table.cell>
                 </flux:table.row>

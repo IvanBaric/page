@@ -71,6 +71,14 @@ Slug generation is delegated to Sanigen when a configured generator or known San
 
 The package does not ship a reusable `HasSlug` trait and does not duplicate application slug infrastructure.
 
+## Project Integration
+
+For the standard admin integration used in every project, see:
+
+- [`docs/project-integration.md`](docs/project-integration.md)
+
+That document covers the required `Sve stranice`, `Zaglavlje` and `Podnožje` sidebar links, the shared `/app/pages` route, the `part=header` and `part=footer` screens, and the required `template_header` / `template_footer` definitions.
+
 ## Integrations
 
 SEO is not implemented here. Configure `pages.seo.trait` for your SEO package, for example `IvanBaric\Seo\Concerns\HasSeo`, and store SEO data through that package.

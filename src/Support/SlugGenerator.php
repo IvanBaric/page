@@ -3,6 +3,7 @@
 namespace IvanBaric\Pages\Support;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
 final class SlugGenerator
@@ -53,6 +54,10 @@ final class SlugGenerator
     private function exists(Model $model, string $slug): bool
     {
         $query = $model->newQuery()->where('slug', $slug);
+
+        if (in_array(SoftDeletes::class, class_uses_recursive($model), true)) {
+            $query->withTrashed();
+        }
 
         if (config('pages.slug.scoped_to_team', true)) {
             $model->team_id === null

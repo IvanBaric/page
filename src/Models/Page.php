@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
+use IvanBaric\Corexis\Concerns\HasLockVersion;
 use IvanBaric\Pages\Support\SlugGenerator;
 use IvanBaric\Pages\Support\TeamResolver;
 
@@ -18,6 +19,7 @@ use IvanBaric\Pages\Support\TeamResolver;
  * @property int|null $team_id
  * @property string $uuid
  * @property string $slug
+ * @property string|null $page_key
  * @property array<string, mixed>|string $title
  * @property array<string, mixed>|string|null $excerpt
  * @property array<string, mixed>|string|null $content
@@ -31,7 +33,7 @@ use IvanBaric\Pages\Support\TeamResolver;
  */
 class Page extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes;
+    use HasFactory, HasLockVersion, HasUuids, SoftDeletes;
 
     protected $guarded = ['id'];
 
@@ -62,7 +64,7 @@ class Page extends Model
         });
 
         static::saving(function (self $page): void {
-            if (! $page->slug || $page->isDirty('title')) {
+            if ($page->localized('title') !== '') {
                 $page->slug = app(SlugGenerator::class)->generate($page, $page->localized('title'));
             }
 
@@ -90,6 +92,7 @@ class Page extends Model
             'published_at' => 'datetime',
             'sort_order' => 'integer',
             'settings' => 'array',
+            'lock_version' => 'integer',
         ];
     }
 
@@ -197,6 +200,13 @@ class Page extends Model
             'is_published' => false,
             'published_at' => null,
         ])->save();
+    }
+
+    public function archive(): bool
+    {
+        $this->forceFill(['is_published' => false])->save();
+
+        return (bool) $this->delete();
     }
 
     public function section(string $type): ?Section

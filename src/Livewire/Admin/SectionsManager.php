@@ -7,12 +7,15 @@ use IvanBaric\Pages\Actions\CreateSectionAction;
 use IvanBaric\Pages\Actions\DeleteSectionAction;
 use IvanBaric\Pages\Actions\UpdateSectionAction;
 use IvanBaric\Pages\Models\Page;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 
 final class SectionsManager extends Component
 {
+    #[Locked]
     public Page $page;
 
+    #[Locked]
     public ?string $editingUuid = null;
 
     public string $locale = 'en';
@@ -28,6 +31,8 @@ final class SectionsManager extends Component
     public bool $is_visible = true;
 
     public int $sort_order = 0;
+
+    public ?int $lock_version = null;
 
     public function mount(Page $page): void
     {
@@ -48,6 +53,7 @@ final class SectionsManager extends Component
         $this->description = is_array($section->description) ? $section->description : [$this->locale => (string) $section->description];
         $this->is_visible = $section->is_visible;
         $this->sort_order = $section->sort_order;
+        $this->lock_version = method_exists($section, 'getLockVersion') ? $section->getLockVersion() : (int) ($section->lock_version ?? 0);
     }
 
     public function save(): void
@@ -77,11 +83,16 @@ final class SectionsManager extends Component
         $section->isVisible() ? $section->hide() : $section->show();
     }
 
-    public function delete(string $uuid): void
+    public function archive(string $uuid): void
     {
         $result = app(DeleteSectionAction::class)->handle($uuid);
 
         Flux::toast(variant: $result->successful ? 'success' : 'danger', text: $result->message);
+    }
+
+    public function delete(string $uuid): void
+    {
+        $this->archive($uuid);
     }
 
     public function render()
@@ -102,6 +113,7 @@ final class SectionsManager extends Component
         $this->description = [$this->locale => ''];
         $this->is_visible = config('pages.defaults.section_visible', true);
         $this->sort_order = 0;
+        $this->lock_version = null;
     }
 
     private function currentLocaleCode(): string
@@ -121,6 +133,7 @@ final class SectionsManager extends Component
             'description' => array_filter($this->description) === [] ? null : $this->description,
             'is_visible' => $this->is_visible,
             'sort_order' => $this->sort_order,
+            'lock_version' => $this->lock_version,
         ];
     }
 }

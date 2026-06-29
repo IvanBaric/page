@@ -7,21 +7,23 @@ namespace IvanBaric\Pages\Actions;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use IvanBaric\Corexis\Concerns\UsesOptimisticLocking;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
+use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
 use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Events\SectionUpdated;
 use IvanBaric\Pages\Models\Section;
 
 final class UpdateSectionAction
 {
-    use AuthorizesPageActions;
+    use AuthorizesPageActions, ResolvesPageModels, UsesOptimisticLocking;
 
     /**
      * @param  array<string, mixed>  $data
      */
     public function handle(Section|string $section, array $data): ActionResult
     {
-        $section = $this->findSection($section);
+        $section = $this->resolveSection($section);
 
         if (! $section) {
             return ActionResult::failure(__('Section not found.'));
@@ -38,9 +40,15 @@ final class UpdateSectionAction
         }
 
         $validated = $validator->validated();
-        DB::transaction(static function () use ($section, $validated): void {
-            $section->fill($validated)->save();
+        $expectedLockVersion = $this->pullExpectedLockVersion($validated);
+
+        $saved = DB::transaction(function () use ($section, $validated, $expectedLockVersion): bool {
+            return $this->saveWithOptimisticLock($section, $validated, $expectedLockVersion);
         });
+
+        if (! $saved) {
+            return ActionResult::fromCorexis($this->staleModelResult());
+        }
 
         $section->refresh();
         SectionUpdated::dispatch($section);
@@ -65,6 +73,7 @@ final class UpdateSectionAction
             'is_visible' => ['nullable', 'boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
             'settings' => ['nullable', 'array'],
+            'lock_version' => ['nullable', 'integer', 'min:0'],
         ];
     }
 
@@ -88,14 +97,4 @@ final class UpdateSectionAction
         ];
     }
 
-    private function findSection(Section|string $section): ?Section
-    {
-        if ($section instanceof Section) {
-            return $section;
-        }
-
-        $model = config('pages.models.section', Section::class);
-
-        return $model::query()->where('uuid', $section)->first();
-    }
 }

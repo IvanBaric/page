@@ -8,7 +8,9 @@
         "illuminate/contracts": "^13.0",
         "illuminate/database": "^13.0",
         "illuminate/support": "^13.0",
-        "ivanbaric/corexis": "^0.1 || ^1.0 || dev-main",
+        "ivanbaric/admin-ui": "dev-main",
+        "ivanbaric/corexis": "dev-main as 1.0.0",
+        "ivanbaric/gallery": "dev-main",
         "livewire/livewire": "^4.0"
     },
     "require-dev": {
@@ -20,6 +22,20 @@
         {
             "type": "path",
             "url": "../corexis",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
+            "type": "path",
+            "url": "../admin-ui",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
+            "type": "path",
+            "url": "../gallery",
             "options": {
                 "symlink": true
             }
