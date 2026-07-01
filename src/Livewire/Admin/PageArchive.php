@@ -22,26 +22,47 @@ class PageArchive extends Component
 
     public string $search = '';
 
+    public ?string $restoringType = null;
+
+    public ?string $restoringUuid = null;
+
+    public string $restoringName = '';
+
+    public ?string $deletingType = null;
+
+    public ?string $deletingUuid = null;
+
+    public string $deletingName = '';
+
     public function updatedSearch(): void
     {
         $this->resetPage();
     }
 
-    public function restore(string $type, string $uuid): void
+    public function confirmRestore(string $type, string $uuid): void
     {
-        $model = $this->modelClassForType($type);
+        $record = $this->findArchivedRecord($type, $uuid);
 
-        if (! $model) {
+        if (! $record instanceof Model) {
             Flux::toast(variant: 'danger', text: __('Arhivirani zapis nije pronađen.'));
 
             return;
         }
 
-        /** @var Model|null $record */
-        $record = $model::onlyTrashed()
-            ->forTeam($this->currentTeamId())
-            ->where('uuid', $uuid)
-            ->first();
+        $this->restoringType = $type;
+        $this->restoringUuid = $uuid;
+        $this->restoringName = $this->recordName($record, $type);
+    }
+
+    public function restore(): void
+    {
+        if (! $this->restoringType || ! $this->restoringUuid) {
+            Flux::toast(variant: 'danger', text: __('Arhivirani zapis nije pronađen.'));
+
+            return;
+        }
+
+        $record = $this->findArchivedRecord($this->restoringType, $this->restoringUuid);
 
         if (! $record instanceof Model || ! method_exists($record, 'restore')) {
             Flux::toast(variant: 'danger', text: __('Arhivirani zapis nije pronađen.'));
@@ -51,10 +72,53 @@ class PageArchive extends Component
 
         $record->restore();
 
+        $this->reset('restoringType', 'restoringUuid', 'restoringName');
         unset($this->archivedRecords);
         $this->resetPage();
 
+        Flux::modal('archive-restore')->close();
         Flux::toast(variant: 'success', text: __('Zapis je vraćen iz arhive.'));
+    }
+
+    public function confirmDelete(string $type, string $uuid): void
+    {
+        $record = $this->findArchivedRecord($type, $uuid);
+
+        if (! $record instanceof Model) {
+            Flux::toast(variant: 'danger', text: __('Arhivirani zapis nije pronađen.'));
+
+            return;
+        }
+
+        $this->deletingType = $type;
+        $this->deletingUuid = $uuid;
+        $this->deletingName = $this->recordName($record, $type);
+    }
+
+    public function delete(): void
+    {
+        if (! $this->deletingType || ! $this->deletingUuid) {
+            Flux::toast(variant: 'danger', text: __('Arhivirani zapis nije pronađen.'));
+
+            return;
+        }
+
+        $record = $this->findArchivedRecord($this->deletingType, $this->deletingUuid);
+
+        if (! $record instanceof Model || ! method_exists($record, 'forceDelete')) {
+            Flux::toast(variant: 'danger', text: __('Arhivirani zapis nije pronađen.'));
+
+            return;
+        }
+
+        $record->forceDelete();
+
+        $this->reset('deletingType', 'deletingUuid', 'deletingName');
+        unset($this->archivedRecords);
+        $this->resetPage();
+
+        Flux::modal('archive-delete')->close();
+        Flux::toast(variant: 'success', text: __('Zapis je trajno obrisan.'));
     }
 
     /** @return Paginator<int, array<string, mixed>> */
@@ -90,6 +154,23 @@ class PageArchive extends Component
     private function currentTeamId(): ?int
     {
         return app(TeamResolver::class)->resolve();
+    }
+
+    private function findArchivedRecord(string $type, string $uuid): ?Model
+    {
+        $model = $this->modelClassForType($type);
+
+        if (! $model) {
+            return null;
+        }
+
+        /** @var Model|null $record */
+        $record = $model::onlyTrashed()
+            ->forTeam($this->currentTeamId())
+            ->where('uuid', $uuid)
+            ->first();
+
+        return $record;
     }
 
     /** @return Collection<int, array<string, mixed>> */

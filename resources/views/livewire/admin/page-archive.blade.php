@@ -15,7 +15,7 @@
         </div>
     </div>
 
-    <x-admin-ui::panel loading loading-target="search,restore" loading-text="{{ __('Učitavam arhivu...') }}">
+    <x-admin-ui::panel loading loading-target="search,restore,delete" loading-text="{{ __('Učitavam arhivu...') }}">
         @php($recordCount = count($this->archivedRecords->items()))
 
         <div class="admin-panel-header">
@@ -50,7 +50,7 @@
                         <div class="flex min-w-0 gap-4">
                             <div class="flex h-20 w-28 shrink-0 overflow-hidden rounded-2xl bg-zinc-100 text-zinc-400 ring-1 ring-inset ring-zinc-200 dark:bg-zinc-900 dark:text-zinc-500 dark:ring-zinc-800">
                                 <div class="flex h-full w-full items-center justify-center">
-                                    <span class="text-2xl font-semibold uppercase">{{ mb_substr((string) $record['type_label'], 0, 1) }}</span>
+                                    <flux:icon icon="archive-box" class="size-8" />
                                 </div>
                             </div>
 
@@ -75,14 +75,26 @@
                             </span>
                         </div>
 
-                        <div class="flex justify-end gap-1">
-                            <button
-                                type="button"
-                                wire:click="restore('{{ $record['type'] }}', '{{ $record['uuid'] }}')"
-                                class="inline-flex h-8 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium text-zinc-800 transition hover:bg-zinc-800/5 dark:text-white dark:hover:bg-white/15"
-                            >
-                                {{ __('Vrati') }}
-                            </button>
+                        <div class="flex items-center justify-end gap-1">
+                            <flux:dropdown position="bottom" align="end">
+                                <flux:button size="sm" variant="ghost" icon="ellipsis-horizontal" :aria-label="__('Akcije')" />
+
+                                <flux:menu>
+                                    <flux:modal.trigger name="archive-restore">
+                                        <flux:menu.item as="button" type="button" wire:click="confirmRestore('{{ $record['type'] }}', '{{ $record['uuid'] }}')" icon="arrow-uturn-left">
+                                            {{ __('Vrati') }}
+                                        </flux:menu.item>
+                                    </flux:modal.trigger>
+
+                                    <flux:menu.separator />
+
+                                    <flux:modal.trigger name="archive-delete">
+                                        <flux:menu.item as="button" type="button" wire:click="confirmDelete('{{ $record['type'] }}', '{{ $record['uuid'] }}')" icon="trash" variant="danger">
+                                            {{ __('Obriši') }}
+                                        </flux:menu.item>
+                                    </flux:modal.trigger>
+                                </flux:menu>
+                            </flux:dropdown>
                         </div>
                     </article>
                 @endforeach
@@ -95,4 +107,46 @@
             </div>
         @endif
     </x-admin-ui::panel>
+
+    <flux:modal name="archive-restore" class="max-w-lg">
+        <div class="space-y-6">
+            <div>
+                <flux:heading size="lg">{{ __('Vratiti zapis iz arhive?') }}</flux:heading>
+                <flux:text class="mt-2">
+                    {{ __('Zapis ":name" bit će ponovno dostupan u administraciji.', ['name' => $restoringName ?: __('odabrani zapis')]) }}
+                </flux:text>
+            </div>
+
+            <div class="flex justify-end gap-2">
+                <flux:modal.close>
+                    <flux:button type="button" variant="ghost">{{ __('Odustani') }}</flux:button>
+                </flux:modal.close>
+
+                <flux:button type="button" wire:click="restore" variant="primary" icon="arrow-uturn-left">
+                    {{ __('Vrati zapis') }}
+                </flux:button>
+            </div>
+        </div>
+    </flux:modal>
+
+    <flux:modal name="archive-delete" class="max-w-lg">
+        <div class="space-y-6">
+            <div>
+                <flux:heading size="lg">{{ __('Trajno obrisati zapis?') }}</flux:heading>
+                <flux:text class="mt-2">
+                    {{ __('Zapis ":name" bit će trajno obrisan iz arhive i više ga neće biti moguće vratiti.', ['name' => $deletingName ?: __('odabrani zapis')]) }}
+                </flux:text>
+            </div>
+
+            <div class="flex justify-end gap-2">
+                <flux:modal.close>
+                    <flux:button type="button" variant="ghost">{{ __('Odustani') }}</flux:button>
+                </flux:modal.close>
+
+                <flux:button type="button" wire:click="delete" variant="danger" icon="trash">
+                    {{ __('Trajno obriši') }}
+                </flux:button>
+            </div>
+        </div>
+    </flux:modal>
 </x-admin-ui::page>

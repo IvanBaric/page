@@ -182,6 +182,47 @@
             </span>
         </span>
     </span>
+@elseif ($preview === 'header_showcase')
+    <span class="relative flex h-full flex-col overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-emerald-100">
+        <span class="flex h-7 items-center justify-between bg-white px-2 shadow-sm ring-1 ring-zinc-100">
+            <span class="flex items-center gap-1.5">
+                <span class="size-4 rounded-full bg-yellow-100 ring-1 ring-yellow-200"></span>
+                <span class="grid gap-0.5">
+                    <span class="h-1.5 w-14 rounded bg-zinc-900"></span>
+                    <span class="h-1 w-10 rounded bg-zinc-300"></span>
+                </span>
+            </span>
+            <span class="hidden gap-1 sm:flex">
+                <span class="h-1.5 w-7 rounded bg-emerald-200"></span>
+                <span class="h-1.5 w-7 rounded bg-sky-100"></span>
+                <span class="h-1.5 w-7 rounded bg-yellow-100"></span>
+            </span>
+            <span class="flex gap-1">
+                <span class="h-3 w-7 rounded border border-zinc-300 bg-white"></span>
+                <span class="h-3 w-8 rounded bg-yellow-200"></span>
+            </span>
+        </span>
+        <span class="relative flex-1 overflow-hidden bg-emerald-100">
+            <span class="absolute inset-0 bg-gradient-to-r from-emerald-200 via-emerald-100 to-yellow-100"></span>
+            <span class="absolute bottom-3 right-5 h-8 w-14 rounded-md bg-white/70"></span>
+            <span class="absolute right-10 top-4 size-8 rounded-full bg-emerald-200"></span>
+            <span class="absolute inset-y-0 left-0 w-[56%] bg-emerald-900/50"></span>
+            <span class="absolute left-3 top-5 inline-flex items-center gap-1 rounded-full border border-white/30 px-2 py-1">
+                <span class="size-2 rounded-full bg-yellow-200"></span>
+                <span class="h-1.5 w-12 rounded bg-white/80"></span>
+            </span>
+            <span class="absolute left-3 top-14 grid w-[42%] gap-1.5">
+                <span class="h-4 w-28 rounded bg-white"></span>
+                <span class="h-4 w-24 rounded bg-white"></span>
+                <span class="h-1.5 w-24 rounded bg-white/70"></span>
+                <span class="h-1.5 w-20 rounded bg-white/60"></span>
+                <span class="mt-2 flex gap-1.5">
+                    <span class="h-3 w-12 rounded bg-yellow-200"></span>
+                    <span class="h-3 w-11 rounded border border-white/70 bg-white/10"></span>
+                </span>
+            </span>
+        </span>
+    </span>
 @elseif ($preview === 'footer_classic')
     <span class="flex h-full flex-col justify-between rounded-md bg-white p-3 ring-1 ring-emerald-100">
         <span class="grid grid-cols-[1.15fr_0.75fr_0.85fr] gap-3">
