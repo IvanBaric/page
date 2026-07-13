@@ -17,34 +17,32 @@ return [
         'section_item' => SectionItem::class,
     ],
 
-    'team_resolver' => class_exists('App\\Resolvers\\TeamResolver') ? 'App\\Resolvers\\TeamResolver' : null,
-
     'default_status' => 'draft',
 
     'statuses' => [
-        'draft' => ['label' => 'Draft'],
-        'published' => ['label' => 'Published'],
-        'archived' => ['label' => 'Archived'],
+        'draft' => ['label' => 'Skica'],
+        'published' => ['label' => 'Objavljeno'],
+        'archived' => ['label' => 'Arhivirano'],
     ],
 
     'default_template' => 'classic',
 
     'templates' => [
-        'classic' => ['label' => 'Classic'],
-        'magazine' => ['label' => 'Magazine'],
-        'product_first' => ['label' => 'Product first'],
+        'classic' => ['label' => 'Klasični'],
+        'magazine' => ['label' => 'Magazinski'],
+        'product_first' => ['label' => 'Proizvodi u prvom planu'],
     ],
 
     'section_types' => [
-        'hero' => ['label' => 'Hero'],
-        'features' => ['label' => 'Features'],
-        'about' => ['label' => 'About'],
-        'statistics' => ['label' => 'Statistics'],
-        'cta' => ['label' => 'Call to action'],
-        'contact_preview' => ['label' => 'Contact preview'],
-        'faq' => ['label' => 'FAQ'],
+        'hero' => ['label' => 'Uvodni blok'],
+        'features' => ['label' => 'Prednosti'],
+        'about' => ['label' => 'O nama'],
+        'statistics' => ['label' => 'Statistika'],
+        'cta' => ['label' => 'Poziv na akciju'],
+        'contact_preview' => ['label' => 'Kontakt'],
+        'faq' => ['label' => 'Česta pitanja'],
         'partners' => ['label' => 'Partners'],
-        'custom' => ['label' => 'Custom'],
+        'custom' => ['label' => 'Prilagođeno'],
     ],
 
     'admin_section_definitions' => [],
@@ -65,7 +63,6 @@ return [
         'legacy_slugs' => ['o-udruzi'],
         'system_slugs' => ['header', 'footer'],
         'singleton_model' => null,
-        'singleton_team_scope' => 'forTeam',
         'singleton_active_scope' => 'active',
         'missing_singleton_text' => 'Javna organizacija još nije dostupna za trenutni tim.',
         'public_route' => [
@@ -102,8 +99,11 @@ return [
         'item_visible' => true,
     ],
 
+    'one_page_navigation' => [
+        'home_section_defaults' => [],
+    ],
+
     'routes' => [
-        'enabled' => true,
         'middleware' => ['web', 'auth'],
     ],
 
@@ -121,55 +121,11 @@ return [
         'section_show' => 'admin.sections.show',
     ],
 
-    'public' => [
-        'routes' => false,
-        'name_prefix' => 'pages.',
-        'prefix' => '',
-        'middleware' => ['web'],
-    ],
-
-    'pagination' => [
-        'admin' => 15,
-        'public' => 12,
-    ],
-
     'translatable' => [
-        'enabled' => true,
-        'fields' => [
-            'pages' => ['title', 'excerpt', 'content'],
-            'sections' => ['title', 'subtitle', 'description', 'content', 'button_text'],
-            'section_items' => ['title', 'subtitle', 'description', 'content', 'button_text'],
-        ],
         'default_locale' => null,
     ],
 
-    'slug' => [
-        'source' => 'title',
-        'column' => 'slug',
-        'scoped_to_team' => true,
-        'sanigen' => [
-            'generator' => null,
-            'method' => 'generate',
-        ],
-    ],
-
-    'seo' => [
-        'enabled' => true,
-        'trait' => 'IvanBaric\\Seo\\Concerns\\HasSeo',
-    ],
-
-    'gallery' => [
-        'enabled' => true,
-        'trait' => 'IvanBaric\\Gallery\\Concerns\\HasGallery',
-    ],
-
-    'media' => [
-        'enabled' => true,
-        'image_columns' => true,
-    ],
-
     'admin_ui' => [
-        'enabled' => true,
         'layout' => 'layouts.app',
     ],
 
@@ -192,43 +148,7 @@ return [
         ],
     ],
 
-    'taxonomy' => [
-        'enabled' => true,
-        'trait' => 'IvanBaric\\Taxonomy\\Concerns\\HasTaxonomies',
-    ],
-
-    'status' => [
-        'enabled' => true,
-    ],
-
-    'settings' => [
-        'enabled' => true,
-    ],
-
-    'language' => [
-        'enabled' => true,
-    ],
-
-    'audit' => [
-        'enabled' => true,
-    ],
-
-    'corexis' => [
-        'action_result' => 'IvanBaric\\Corexis\\Data\\ActionResult',
-        'tenant_resolver' => 'IvanBaric\\Corexis\\Contracts\\TenantResolver',
-        'tenant_column' => 'team_id',
-    ],
-
     'features' => [
         'admin_routes' => true,
-        'public_routes' => false,
-        'soft_deletes' => true,
-        'seo' => true,
-        'gallery' => true,
-        'media' => true,
-        'taxonomy' => true,
-        'settings' => true,
-        'language' => true,
-        'audit' => true,
     ],
 ];

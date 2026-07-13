@@ -6,7 +6,7 @@ namespace IvanBaric\Pages\Livewire\Admin;
 
 use Illuminate\Contracts\View\View;
 use IvanBaric\Pages\Models\Section;
-use IvanBaric\Pages\Support\TeamResolver;
+use IvanBaric\Pages\Support\PagesModels;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
@@ -18,9 +18,8 @@ class SectionShow extends Component
 
     public function mount(Section $section): void
     {
-        $sectionModel = config('pages.models.section', Section::class);
+        $sectionModel = PagesModels::section();
         $section = $sectionModel::query()
-            ->forTeam($this->currentTeamId())
             ->where('uuid', $section->getAttribute('uuid'))
             ->first();
 
@@ -57,10 +56,5 @@ class SectionShow extends Component
     {
         return view('pages::livewire.admin.section-show')
             ->layout('layouts.app', ['title' => $this->section->localized('title')]);
-    }
-
-    private function currentTeamId(): ?int
-    {
-        return app(TeamResolver::class)->resolve();
     }
 }

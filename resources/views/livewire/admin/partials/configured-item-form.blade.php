@@ -9,7 +9,8 @@
     $usesSidebarGrid = $hasSidebar && ($inlineForm || ! $modalFlyout);
 @endphp
 
-<form wire:submit="saveItem" @class(['space-y-8' => ! $inlineForm, 'space-y-6' => $inlineForm])>
+<form wire:submit="saveItem" wire:loading.class="admin-panel-content-loading" wire:target="saveItem,saveAllChanges" @class(['relative min-w-0', 'space-y-8' => ! $inlineForm, 'space-y-6' => $inlineForm])>
+    <x-admin-ui::loading-overlay target="saveItem,saveAllChanges" :text="__('Spremanje...')" />
     @if ($showFormHeader)
         <div>
             <flux:heading size="lg">{{ $this->formTitle() }}</flux:heading>
@@ -17,11 +18,11 @@
         </div>
     @endif
 
-    <div @class(['grid gap-6', 'lg:grid-cols-[minmax(0,1fr)_22rem]' => $usesSidebarGrid])>
-        <div class="space-y-5">
+    <div @class(['grid min-w-0 gap-6', 'lg:grid-cols-[minmax(0,1fr)_22rem]' => $usesSidebarGrid])>
+        <div class="min-w-0 space-y-5">
             @if ($showTitle && $showSubtitle && ! $singleColumnFields)
                 <div @class(['grid gap-5', 'md:grid-cols-2' => $subtitleType !== 'textarea'])>
-                    <flux:input wire:model="form.title" :label="$titleLabel" />
+                    <flux:input wire:model="form.title" :label="$titleLabel" data-required />
                     @if ($subtitleType === 'textarea')
                         <flux:textarea wire:model="form.subtitle" :label="$subtitleLabel" :rows="$subtitleRows" />
                     @else
@@ -29,14 +30,14 @@
                     @endif
                 </div>
             @elseif ($showTitle && $showSubtitle)
-                <flux:input wire:model="form.title" :label="$titleLabel" />
+                <flux:input wire:model="form.title" :label="$titleLabel" data-required />
                 @if ($subtitleType === 'textarea')
                     <flux:textarea wire:model="form.subtitle" :label="$subtitleLabel" :rows="$subtitleRows" />
                 @else
                     <flux:input wire:model="form.subtitle" :label="$subtitleLabel" />
                 @endif
             @elseif ($showTitle)
-                <flux:input wire:model="form.title" :label="$titleLabel" />
+                <flux:input wire:model="form.title" :label="$titleLabel" data-required />
             @elseif ($showSubtitle)
                 @if ($subtitleType === 'textarea')
                     <flux:textarea wire:model="form.subtitle" :label="$subtitleLabel" :rows="$subtitleRows" />
@@ -54,25 +55,16 @@
                         @php
                             $fieldType = (string) ($field['type'] ?? 'text');
                             $fieldKey = (string) ($field['key'] ?? '');
-                            $inputType = in_array($fieldType, ['date', 'time', 'number', 'url'], true) ? $fieldType : 'text';
                             $isWideField = in_array($fieldType, ['textarea'], true);
                         @endphp
 
                         @if ($fieldKey !== '')
                             <div @class(['md:col-span-2' => $isWideField && ! $singleColumnFields])>
-                                @if ($fieldType === 'textarea')
-                                    <flux:textarea wire:model="form.customData.{{ $fieldKey }}" :label="$field['label']" :rows="$field['rows']" />
-                                @elseif ($fieldType === 'select')
-                                    <flux:select wire:model="form.customData.{{ $fieldKey }}" :label="$field['label']" class="w-full">
-                                        @foreach ($field['options'] as $option)
-                                            <flux:select.option value="{{ $option['value'] }}">{{ $option['label'] }}</flux:select.option>
-                                        @endforeach
-                                    </flux:select>
-                                @elseif ($fieldType === 'boolean')
-                                    <flux:checkbox wire:model="form.customData.{{ $fieldKey }}" :label="$field['label']" />
-                                @else
-                                    <flux:input wire:model="form.customData.{{ $fieldKey }}" :label="$field['label']" :type="$inputType" />
-                                @endif
+                                @include('pages::livewire.admin.partials.configured-field-control', [
+                                    'field' => $field,
+                                    'wireModel' => 'form.customData.'.$fieldKey,
+                                    'booleanControl' => 'checkbox',
+                                ])
 
                                 @if (($field['help'] ?? '') !== '')
                                     <p class="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{{ $field['help'] }}</p>
@@ -93,7 +85,7 @@
         </div>
 
         @if ($hasSidebar)
-            <aside class="space-y-5">
+            <aside class="min-w-0 space-y-5">
                 @if ($showImage)
                     <x-admin-ui::media-upload
                         wire-model="form.imageUpload"
@@ -102,6 +94,7 @@
                         :label="$imageLabel"
                         :help="$imageHelp"
                         :size="$imageUploadSize"
+                        :fit="$imageFit"
                         remove-action="removeImage"
                     />
                 @endif
@@ -115,12 +108,22 @@
 
                 @if ($showIcon)
                     <div>
-                        <flux:input wire:model="form.icon" :label="$iconLabel" />
-                        @if ($showIconHelp)
-                            <a href="https://heroicons.com/" target="_blank" rel="noopener noreferrer" class="mt-2 inline-flex text-xs font-medium text-accent hover:underline">
-                                {{ __('Pregled ikonica') }}
-                            </a>
+                        @if ($iconPicker)
+                            <livewire:admin-ui.icon-picker
+                                wire:model="form.icon"
+                                :label="$iconLabel"
+                                :nullable="true"
+                            />
+                        @elseif (! empty($iconOptions))
+                            <flux:select wire:model="form.icon" variant="listbox" :label="$iconLabel">
+                                @foreach ($iconOptions as $option)
+                                    <flux:select.option value="{{ $option['value'] }}">{{ $option['label'] }}</flux:select.option>
+                                @endforeach
+                            </flux:select>
+                        @else
+                            <flux:input wire:model="form.icon" :label="$iconLabel" />
                         @endif
+
                     </div>
                 @endif
 
@@ -151,7 +154,7 @@
                     <flux:button type="button" variant="ghost">{{ __('Odustani') }}</flux:button>
                 </flux:modal.close>
             @endif
-            <flux:button type="submit" variant="primary" icon="check">{{ $submitLabel }}</flux:button>
+            <x-admin-ui::submit-button target="saveItem">{{ $submitLabel }}</x-admin-ui::submit-button>
         </div>
     @endunless
 </form>

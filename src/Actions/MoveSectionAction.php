@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace IvanBaric\Pages\Actions;
 
 use Illuminate\Support\Facades\DB;
+use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
-use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Events\SectionUpdated;
 use IvanBaric\Pages\Models\Page;
 use IvanBaric\Pages\Models\Section;
@@ -22,19 +22,19 @@ final class MoveSectionAction
         $targetPage = $this->resolvePage($targetPage);
 
         if (! $source) {
-            return ActionResult::failure(__('Sekcija nije pronađena.'));
+            return ActionResult::error(__('Sekcija nije pronađena.'));
         }
 
         if (! $targetPage) {
-            return ActionResult::failure(__('Odabrana stranica nije pronađena.'));
+            return ActionResult::error(__('Odabrana stranica nije pronađena.'));
         }
 
         if ((int) $source->getAttribute('page_id') === (int) $targetPage->getKey()) {
-            return ActionResult::failure(__('Sekcija je već na odabranoj stranici.'));
+            return ActionResult::error(__('Sekcija je već na odabranoj stranici.'));
         }
 
         if ((int) $source->getAttribute('team_id') !== (int) $targetPage->getAttribute('team_id')) {
-            return ActionResult::failure(__('Sekciju nije moguće premjestiti na odabranu stranicu.'));
+            return ActionResult::error(__('Sekciju nije moguće premjestiti na odabranu stranicu.'));
         }
 
         if ($result = $this->authorizePageAction('pages.sections.manage', $source)) {
@@ -56,7 +56,6 @@ final class MoveSectionAction
 
             $lockedSection->forceFill([
                 'page_id' => $targetPage->getKey(),
-                'team_id' => $targetPage->getAttribute('team_id'),
                 'sort_order' => ((int) $targetPage->sections()->max('sort_order')) + 1,
             ])->save();
 

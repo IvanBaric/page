@@ -145,6 +145,15 @@ final class AdminSection
         return $this->tabOfType('settings');
     }
 
+    /** @return array<int, Tab> */
+    public function settingsTabs(): array
+    {
+        return array_values(array_filter(
+            $this->tabs,
+            static fn (Tab $tab): bool => $tab->type() === 'settings',
+        ));
+    }
+
     /** @return array<string, string> */
     public function messagesValue(): array
     {

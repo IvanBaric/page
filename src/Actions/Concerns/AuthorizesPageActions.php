@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace IvanBaric\Pages\Actions\Concerns;
 
-use IvanBaric\Pages\Data\ActionResult;
+use IvanBaric\Corexis\Data\ActionResult;
 
 trait AuthorizesPageActions
 {
@@ -12,6 +12,6 @@ trait AuthorizesPageActions
     {
         $result = corexis_authorization_result($ability, $arguments);
 
-        return $result ? ActionResult::fromCorexis($result) : null;
+        return $result;
     }
 }

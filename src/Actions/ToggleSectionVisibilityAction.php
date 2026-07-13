@@ -8,10 +8,10 @@ use Illuminate\Support\Facades\DB;
 use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
-use IvanBaric\Pages\Events\SectionDeleted;
+use IvanBaric\Pages\Events\SectionUpdated;
 use IvanBaric\Pages\Models\Section;
 
-final class DeleteSectionAction
+final class ToggleSectionVisibilityAction
 {
     use AuthorizesPageActions, ResolvesPageModels;
 
@@ -27,21 +27,17 @@ final class DeleteSectionAction
             return $result;
         }
 
-        $sectionKey = $section->getKey();
-        $uuid = (string) $section->getAttribute('uuid');
-
-        DB::transaction(static function () use ($section): void {
-            /** @var Section $lockedSection */
-            $lockedSection = $section->newQuery()
-                ->whereKey($section->getKey())
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            $lockedSection->archive();
+        DB::transaction(function () use ($section): void {
+            $locked = $section->newQuery()->whereKey($section->getKey())->lockForUpdate()->firstOrFail();
+            $locked->isVisible() ? $locked->hide() : $locked->show();
         });
 
-        SectionDeleted::dispatch($sectionKey, $uuid);
+        $section->refresh();
+        SectionUpdated::dispatch($section);
 
-        return ActionResult::success(__('Sekcija je arhivirana.'));
+        return ActionResult::success(
+            $section->isVisible() ? __('Sekcija je uključena.') : __('Sekcija je isključena.'),
+            $section,
+        );
     }
 }

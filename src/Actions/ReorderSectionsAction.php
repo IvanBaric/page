@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace IvanBaric\Pages\Actions;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
+use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
-use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Events\PageSectionsReordered;
 use IvanBaric\Pages\Models\Page;
 
@@ -23,33 +24,45 @@ final class ReorderSectionsAction
         $page = $this->resolvePage($page);
 
         if (! $page) {
-            return ActionResult::failure(__('Page not found.'));
+            return ActionResult::error(__('Stranica nije pronađena.'));
         }
 
         if ($result = $this->authorizePageAction('pages.sections.manage', $page)) {
             return $result;
         }
 
+        $validator = Validator::make(['uuids' => $sectionUuids], [
+            'uuids' => ['array'],
+            'uuids.*' => ['required', 'uuid', 'distinct'],
+        ]);
+
+        if ($validator->fails()) {
+            return ActionResult::error(__('Redoslijed sekcija nije valjan.'), errors: $validator->errors()->toArray());
+        }
+
+        if ($page->sections()->whereIn('uuid', $sectionUuids)->count() !== count($sectionUuids)) {
+            return ActionResult::error(__('Redoslijed sadrži sekciju koja ne pripada ovoj stranici.'));
+        }
+
         DB::transaction(static function () use ($page, $sectionUuids): void {
-            Page::query()
+            $page->newQuery()
                 ->whereKey($page->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
 
             $page->sections()
-                ->whereIn('uuid', array_values($sectionUuids))
+                ->whereIn('uuid', $sectionUuids)
                 ->lockForUpdate()
                 ->get();
 
-            foreach (array_values($sectionUuids) as $position => $uuid) {
+            foreach ($sectionUuids as $position => $uuid) {
                 $page->sections()->where('uuid', $uuid)->update(['sort_order' => $position]);
             }
         });
 
         $page->refresh();
-        PageSectionsReordered::dispatch($page, array_values($sectionUuids));
+        PageSectionsReordered::dispatch($page, $sectionUuids);
 
-        return ActionResult::success(__('Sections reordered.'), $page);
+        return ActionResult::success(__('Redoslijed sekcija je spremljen.'), $page);
     }
-
 }

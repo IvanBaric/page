@@ -4,15 +4,16 @@ namespace IvanBaric\Pages\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
+use IvanBaric\Corexis\Concerns\BelongsToTenant;
 use IvanBaric\Corexis\Concerns\HasLockVersion;
-use IvanBaric\Pages\Support\SlugGenerator;
-use IvanBaric\Pages\Support\TeamResolver;
+use IvanBaric\Corexis\Concerns\HasUniqueSlug;
+use IvanBaric\Corexis\Concerns\HasUuid;
+use IvanBaric\Pages\Support\PagesConfigResolver;
+use IvanBaric\Pages\Support\PagesModels;
 
 /**
  * @property int $id
@@ -33,26 +34,13 @@ use IvanBaric\Pages\Support\TeamResolver;
  */
 class Page extends Model
 {
-    use HasFactory, HasLockVersion, HasUuids, SoftDeletes;
+    use BelongsToTenant, HasLockVersion, HasUniqueSlug, HasUuid, SoftDeletes;
 
     protected $guarded = ['id'];
 
     public function getTable(): string
     {
-        return config('pages.tables.pages', 'pages');
-    }
-
-    public function getRouteKeyName(): string
-    {
-        return 'uuid';
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    public function uniqueIds(): array
-    {
-        return ['uuid'];
+        return PagesConfigResolver::pagesTable();
     }
 
     protected static function booted(): void
@@ -60,21 +48,23 @@ class Page extends Model
         static::creating(function (self $page): void {
             $page->status ??= config('pages.default_status', 'draft');
             $page->template ??= config('pages.default_template', 'classic');
-            $page->team_id ??= app(TeamResolver::class)->resolve();
         });
 
         static::saving(function (self $page): void {
-            if ($page->localized('title') !== '') {
-                $page->slug = app(SlugGenerator::class)->generate($page, $page->localized('title'));
+            if (! $page->is_home) {
+                return;
             }
 
-            if ($page->is_home) {
-                $page->newQuery()
-                    ->forTeam($page->team_id)
-                    ->where('is_home', true)
-                    ->when($page->exists, fn (Builder $query) => $query->whereKeyNot($page->getKey()))
-                    ->update(['is_home' => false]);
+            $query = $page->newQueryWithoutRelationships()
+                ->withoutGlobalScopes()
+                ->where('team_id', $page->team_id)
+                ->where('is_home', true);
+
+            if ($page->exists) {
+                $query->whereKeyNot($page->getKey());
             }
+
+            $query->update(['is_home' => false]);
         });
     }
 
@@ -96,21 +86,25 @@ class Page extends Model
         ];
     }
 
+    /** @return HasMany<Section, $this> */
     public function sections(): HasMany
     {
-        return $this->hasMany(config('pages.models.section', Section::class));
+        return $this->hasMany(PagesModels::section());
     }
 
+    /** @return HasMany<Section, $this> */
     public function visibleSections(): HasMany
     {
         return $this->sections()->visible()->ordered();
     }
 
+    /** @return HasMany<Section, $this> */
     public function orderedSections(): HasMany
     {
         return $this->sections()->ordered();
     }
 
+    /** @param Builder<Page> $query */
     #[Scope]
     protected function published(Builder $query): void
     {
@@ -120,32 +114,35 @@ class Page extends Model
             ->where('published_at', '<=', now());
     }
 
+    /** @param Builder<Page> $query */
     #[Scope]
     protected function home(Builder $query): void
     {
         $query->where('is_home', true);
     }
 
+    /** @param Builder<Page> $query */
     #[Scope]
     protected function ordered(Builder $query): void
     {
         $query->orderBy('sort_order')->orderBy('title')->orderByDesc('created_at');
     }
 
-    #[Scope]
-    protected function forTeam(Builder $query, ?int $teamId): void
-    {
-        $teamId === null ? $query->whereNull('team_id') : $query->where('team_id', $teamId);
-    }
-
+    /** @param Builder<Page> $query */
     public function scopeStatus(Builder $query, string $status): void
     {
         $query->where('status', $status);
     }
 
+    /** @param Builder<Page> $query */
     public function scopeTemplate(Builder $query, string $template): void
     {
         $query->where('template', $template);
+    }
+
+    public static function forSlug(string $slug): ?self
+    {
+        return static::query()->where('slug', $slug)->first();
     }
 
     public static function findByUuid(string $uuid): ?self
@@ -156,11 +153,6 @@ class Page extends Model
     public static function forUuid(string $uuid): ?self
     {
         return static::findByUuid($uuid);
-    }
-
-    public static function forSlug(string $slug, ?int $teamId = null): ?self
-    {
-        return static::query()->forTeam($teamId ?? app(TeamResolver::class)->resolve())->where('slug', $slug)->first();
     }
 
     /**
@@ -177,6 +169,23 @@ class Page extends Model
     public function isHome(): bool
     {
         return $this->is_home;
+    }
+
+    public function slugSource(): string
+    {
+        return $this->localized('title');
+    }
+
+    public function markAsHome(): bool
+    {
+        return $this->getConnection()->transaction(function (): bool {
+            $this->newQuery()
+                ->where('is_home', true)
+                ->when($this->exists, fn (Builder $query) => $query->whereKeyNot($this->getKey()))
+                ->update(['is_home' => false]);
+
+            return $this->forceFill(['is_home' => true])->save();
+        });
     }
 
     public function isPublished(): bool
@@ -214,6 +223,7 @@ class Page extends Model
         return $this->sections()->type($type)->ordered()->first();
     }
 
+    /** @return HasMany<Section, $this> */
     public function sectionsOfType(string $type): HasMany
     {
         return $this->sections()->type($type)->ordered();
@@ -224,10 +234,7 @@ class Page extends Model
      */
     public function addSection(string $type, array $data = []): Section
     {
-        $model = config('pages.models.section', Section::class);
-
         return $this->sections()->create(array_merge([
-            'team_id' => $this->team_id,
             'type' => $type,
             'sort_order' => $this->sections()->max('sort_order') + 1,
         ], $data));
@@ -270,7 +277,7 @@ class Page extends Model
         return (string) ($value[$locale] ?? $value[$fallback] ?? reset($value) ?: '');
     }
 
-    private static function currentLocaleCode(): string
+    protected static function currentLocaleCode(): string
     {
         return corexis_locale_code() ?: config('app.locale', 'en');
     }

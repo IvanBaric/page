@@ -1,21 +1,20 @@
 <section class="admin-page">
-    <div class="admin-page-header">
-        <div class="admin-page-header-copy">
-            <div class="mb-6">
-                <flux:breadcrumbs>
-                    <flux:breadcrumbs.item :href="route($this->pageIndexRouteName())" wire:navigate>{{ __('Stranice') }}</flux:breadcrumbs.item>
-                    <flux:breadcrumbs.item>{{ $page->localized('title') }}</flux:breadcrumbs.item>
-                </flux:breadcrumbs>
-            </div>
-            <h1 class="admin-page-title">{{ $page->localized('title') }}</h1>
-            <flux:text class="admin-page-description">{{ __('Složite sadržaj stranice, promijenite redoslijed sekcija, kopirajte ili premjestite postojeće blokove.') }}</flux:text>
-        </div>
-        <div class="admin-page-actions">
-            <flux:modal.trigger name="section-create">
-                <flux:button type="button" wire:click="openSectionCreator" variant="primary" icon="plus">{{ __('Dodaj sekciju') }}</flux:button>
-            </flux:modal.trigger>
-        </div>
-    </div>
+    <x-admin-ui::page-header
+        :title="$page->localized('title')"
+        :description="__('Složite sadržaj stranice, promijenite redoslijed sekcija, kopirajte ili premjestite postojeće blokove.')"
+        icon="document-text"
+    >
+        <x-slot:before>
+            <flux:breadcrumbs class="mb-6">
+                <flux:breadcrumbs.item :href="route($this->pageIndexRouteName())" wire:navigate>{{ __('Stranice') }}</flux:breadcrumbs.item>
+                <flux:breadcrumbs.item>{{ $page->localized('title') }}</flux:breadcrumbs.item>
+            </flux:breadcrumbs>
+        </x-slot:before>
+
+        <x-slot:actions>
+            <flux:button type="button" wire:click="openSectionCreator" wire:loading.attr="disabled" wire:target="openSectionCreator" variant="primary" icon="plus">{{ __('Dodaj sekciju') }}</flux:button>
+        </x-slot:actions>
+    </x-admin-ui::page-header>
 
     <x-admin-ui::panel loading loading-target="toggle,reorderSection,addSelectedSection,copySection,moveSection,delete" loading-text="{{ __('Ažuriram sekcije...') }}">
         <div class="admin-panel-header">
@@ -26,19 +25,28 @@
         </div>
 
         @if ($this->sections->isEmpty())
-            <div class="px-6 py-14 text-center">
-                <div class="mx-auto inline-flex size-12 items-center justify-center rounded-full bg-accent/10 text-accent-content ring-1 ring-accent/15 dark:bg-accent/15 dark:text-accent-content dark:ring-accent/25">
+            <x-admin-ui::empty-state
+                :title="__('Stranica je spremna za sadržaj')"
+                :description="__('Dodajte prvu sekciju, zatim uredite njezin sadržaj, izgled i redoslijed na stranici.')"
+            >
+                <x-slot:icon>
                     <flux:icon name="rectangle-stack" class="size-5" />
-                </div>
-                <h3 class="mt-4 text-base font-semibold text-zinc-950 dark:text-white">{{ __('Stranica je spremna za sadržaj') }}</h3>
-                <p class="mx-auto mt-2 max-w-md text-sm leading-6 text-zinc-500 dark:text-zinc-400">{{ __('Dodajte prvu sekciju, zatim uredite njezin sadržaj, izgled i redoslijed na stranici.') }}</p>
-                <flux:modal.trigger name="section-create">
-                    <flux:button type="button" wire:click="openSectionCreator" class="mt-5" variant="primary" icon="plus">
+                </x-slot:icon>
+                <x-slot:actions>
+                    <flux:button type="button" wire:click="openSectionCreator" wire:loading.attr="disabled" wire:target="openSectionCreator" variant="primary" icon="plus">
                         {{ __('Dodaj prvu sekciju') }}
                     </flux:button>
-                </flux:modal.trigger>
-            </div>
+                </x-slot:actions>
+            </x-admin-ui::empty-state>
         @else
+            <div class="admin-list-header hidden grid-cols-[3rem_minmax(0,1fr)_7rem_9rem_6rem] lg:grid">
+                <span></span>
+                <span>{{ __('Sekcija') }}</span>
+                <span>{{ __('Stavke') }}</span>
+                <span>{{ __('Status') }}</span>
+                <span class="text-right">{{ __('Akcije') }}</span>
+            </div>
+
             <div wire:sort="reorderSection" class="divide-y divide-zinc-200 dark:divide-zinc-800">
                 @foreach ($this->sections as $section)
                     <article wire:key="section-{{ $section->uuid }}" wire:sort:item="{{ $section->uuid }}" class="grid grid-cols-1 gap-4 px-5 py-4 transition hover:bg-zinc-50/80 dark:hover:bg-white/[0.03] lg:grid-cols-[3rem_minmax(0,1fr)_7rem_9rem_6rem] lg:items-center">
@@ -66,27 +74,19 @@
                                 <flux:button size="sm" variant="ghost" icon="ellipsis-horizontal" :aria-label="__('Akcije')" />
 
                                 <flux:menu>
-                                    <flux:modal.trigger name="section-form">
-                                        <flux:menu.item as="button" type="button" wire:click="edit('{{ $section->uuid }}')" icon="cog-6-tooth">
-                                            {{ __('Uredi') }}
-                                        </flux:menu.item>
-                                    </flux:modal.trigger>
-                                    <flux:modal.trigger name="section-copy">
-                                        <flux:menu.item as="button" type="button" wire:click="confirmCopy('{{ $section->uuid }}')" icon="document-duplicate">
-                                            {{ __('Kopiraj') }}
-                                        </flux:menu.item>
-                                    </flux:modal.trigger>
-                                    <flux:modal.trigger name="section-move">
-                                        <flux:menu.item as="button" type="button" wire:click="confirmMove('{{ $section->uuid }}')" icon="arrow-right">
-                                            {{ __('Premjesti') }}
-                                        </flux:menu.item>
-                                    </flux:modal.trigger>
+                                    <flux:menu.item as="button" type="button" wire:click="edit('{{ $section->uuid }}')" icon="cog-6-tooth">
+                                        {{ __('Uredi') }}
+                                    </flux:menu.item>
+                                    <flux:menu.item as="button" type="button" wire:click="confirmCopy('{{ $section->uuid }}')" icon="document-duplicate">
+                                        {{ __('Kopiraj') }}
+                                    </flux:menu.item>
+                                    <flux:menu.item as="button" type="button" wire:click="confirmMove('{{ $section->uuid }}')" icon="arrow-right">
+                                        {{ __('Premjesti') }}
+                                    </flux:menu.item>
                                     <flux:menu.separator />
-                                    <flux:modal.trigger name="section-delete">
-                                        <flux:menu.item as="button" type="button" wire:click="confirmDelete('{{ $section->uuid }}')" icon="archive-box" variant="danger">
-                                            {{ __('Arhiviraj') }}
-                                        </flux:menu.item>
-                                    </flux:modal.trigger>
+                                    <flux:menu.item as="button" type="button" wire:click="confirmDelete('{{ $section->uuid }}')" icon="archive-box" variant="danger">
+                                        {{ __('Arhiviraj') }}
+                                    </flux:menu.item>
                                 </flux:menu>
                             </flux:dropdown>
                         </div>
@@ -96,10 +96,11 @@
         @endif
     </x-admin-ui::panel>
 
-    <flux:modal name="section-create" class="w-[calc(100vw-2rem)] max-w-6xl lg:w-[72rem]">
+    <flux:modal name="section-create" x-on:close="$wire.cancelSectionCreator()" class="w-[calc(100vw-2rem)] max-w-6xl lg:w-[72rem]">
         @php($selectedSection = $this->selectedSectionDetails)
 
-        <form wire:submit="addSelectedSection" class="flex h-[min(78vh,38rem)] flex-col gap-6 overflow-hidden">
+        <form wire:submit="addSelectedSection" wire:loading.class="admin-panel-content-loading" wire:target="addSelectedSection" class="relative flex h-[min(78vh,38rem)] flex-col gap-6 overflow-hidden">
+            <x-admin-ui::loading-overlay target="addSelectedSection" :text="__('Spremanje...')" />
             <div class="shrink-0">
                 <div>
                     <flux:heading size="lg">{{ __('Dodaj sekciju') }}</flux:heading>
@@ -204,8 +205,9 @@
         </form>
     </flux:modal>
 
-    <flux:modal name="section-form" flyout variant="floating" class="md:w-lg">
-        <form wire:submit="saveSection" class="space-y-12">
+    <flux:modal name="section-form" x-on:close="$wire.cancelSectionForm()" flyout variant="floating" class="md:w-lg">
+        <form wire:submit="saveSection" wire:loading.class="admin-panel-content-loading" wire:target="saveSection,saveSectionSettings" class="relative space-y-12">
+            <x-admin-ui::loading-overlay target="saveSection,saveSectionSettings" :text="__('Spremanje...')" />
             <div>
                 <flux:heading size="lg">{{ __('Uredi sekciju') }}</flux:heading>
                 <flux:text class="mt-2">{{ __('Uredite naziv i opis sekcije.') }}</flux:text>
@@ -267,13 +269,14 @@
                 <flux:modal.close>
                     <flux:button type="button" variant="ghost">{{ __('Odustani') }}</flux:button>
                 </flux:modal.close>
-                <flux:button type="submit" variant="primary" icon="check">{{ __('Spremi postavke') }}</flux:button>
+                <x-admin-ui::submit-button target="saveSectionSettings">{{ __('Spremi postavke') }}</x-admin-ui::submit-button>
             </div>
         </form>
     </flux:modal>
 
-    <flux:modal name="section-copy" class="max-w-lg">
-        <form wire:submit="copySection" class="space-y-6">
+    <flux:modal name="section-copy" x-on:close="$wire.cancelCopy()" class="max-w-lg">
+        <form wire:submit="copySection" wire:loading.class="admin-panel-content-loading" wire:target="copySection" class="relative space-y-6">
+            <x-admin-ui::loading-overlay target="copySection" :text="__('Spremanje...')" />
             <div>
                 <flux:heading size="lg">{{ __('Kopirati sekciju?') }}</flux:heading>
                 <flux:text class="mt-2">{{ __('Kopija zadržava izgled, slike i tekstove. Nakon kopiranja možete promijeniti sadržaj na odabranoj stranici.') }}</flux:text>
@@ -291,13 +294,14 @@
                 <flux:modal.close>
                     <flux:button type="button" variant="ghost">{{ __('Odustani') }}</flux:button>
                 </flux:modal.close>
-                <flux:button type="submit" variant="primary" icon="document-duplicate">{{ __('Kopiraj na stranicu') }}</flux:button>
+                <x-admin-ui::submit-button target="copySection" icon="document-duplicate">{{ __('Kopiraj na stranicu') }}</x-admin-ui::submit-button>
             </div>
         </form>
     </flux:modal>
 
-    <flux:modal name="section-move" class="max-w-lg">
-        <form wire:submit="moveSection" class="space-y-6">
+    <flux:modal name="section-move" x-on:close="$wire.cancelMove()" class="max-w-lg">
+        <form wire:submit="moveSection" wire:loading.class="admin-panel-content-loading" wire:target="moveSection" class="relative space-y-6">
+            <x-admin-ui::loading-overlay target="moveSection" :text="__('Spremanje...')" />
             <div>
                 <flux:heading size="lg">{{ __('Premjestiti sekciju?') }}</flux:heading>
                 <flux:text class="mt-2">{{ __('Sekcija će se ukloniti s ove stranice i premjestiti na kraj odabrane stranice. Sav sadržaj, slike i postavke ostaju isti.') }}</flux:text>
@@ -322,13 +326,13 @@
                     <flux:button type="button" variant="ghost">{{ __('Odustani') }}</flux:button>
                 </flux:modal.close>
                 @if ($this->moveTargetPages->isNotEmpty())
-                    <flux:button type="submit" variant="primary" icon="arrow-right">{{ __('Premjesti na stranicu') }}</flux:button>
+                    <x-admin-ui::submit-button target="moveSection" icon="arrow-right">{{ __('Premjesti na stranicu') }}</x-admin-ui::submit-button>
                 @endif
             </div>
         </form>
     </flux:modal>
 
-    <flux:modal name="section-delete" class="max-w-lg">
+    <flux:modal name="section-delete" x-on:close="$wire.cancelDelete()" class="max-w-lg">
         <div class="space-y-6">
             <div>
                 <flux:heading size="lg">{{ __('Arhivirati sekciju?') }}</flux:heading>

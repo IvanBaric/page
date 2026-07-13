@@ -8,9 +8,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use IvanBaric\Corexis\Concerns\UsesOptimisticLocking;
+use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
-use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Events\SectionUpdated;
 use IvanBaric\Pages\Models\Section;
 
@@ -26,7 +26,7 @@ final class UpdateSectionAction
         $section = $this->resolveSection($section);
 
         if (! $section) {
-            return ActionResult::failure(__('Section not found.'));
+            return ActionResult::error(__('Sekcija nije pronađena.'));
         }
 
         if ($result = $this->authorizePageAction('pages.sections.manage', $section)) {
@@ -36,7 +36,7 @@ final class UpdateSectionAction
         $validator = Validator::make($data, $this->rules(), attributes: $this->attributes());
 
         if ($validator->fails()) {
-            return ActionResult::failure(__('The section could not be updated.'), $validator->errors());
+            return ActionResult::error(__('Sekciju nije moguće ažurirati.'), errors: $validator->errors()->toArray());
         }
 
         $validated = $validator->validated();
@@ -47,13 +47,13 @@ final class UpdateSectionAction
         });
 
         if (! $saved) {
-            return ActionResult::fromCorexis($this->staleModelResult());
+            return $this->staleModelResult();
         }
 
         $section->refresh();
         SectionUpdated::dispatch($section);
 
-        return ActionResult::success(__('Section updated.'), $section);
+        return ActionResult::success(__('Sekcija je ažurirana.'), $section);
     }
 
     /**
@@ -67,7 +67,6 @@ final class UpdateSectionAction
             'subtitle' => ['nullable', 'array'],
             'description' => ['nullable', 'array'],
             'content' => ['nullable', 'array'],
-            'image' => ['nullable', 'string', 'max:2048'],
             'button_text' => ['nullable', 'array'],
             'button_url' => ['nullable', 'string', 'max:2048'],
             'is_visible' => ['nullable', 'boolean'],
@@ -83,18 +82,16 @@ final class UpdateSectionAction
     private function attributes(): array
     {
         return [
-            'type' => __('section type'),
-            'title' => __('title'),
-            'subtitle' => __('subtitle'),
-            'description' => __('description'),
-            'content' => __('content'),
-            'image' => __('image'),
-            'button_text' => __('button text'),
-            'button_url' => __('button URL'),
-            'is_visible' => __('visible'),
-            'sort_order' => __('sort order'),
-            'settings' => __('settings'),
+            'type' => __('vrsta sekcije'),
+            'title' => __('naziv'),
+            'subtitle' => __('podnaslov'),
+            'description' => __('opis'),
+            'content' => __('sadržaj'),
+            'button_text' => __('tekst gumba'),
+            'button_url' => __('poveznica gumba'),
+            'is_visible' => __('vidljivost'),
+            'sort_order' => __('redoslijed'),
+            'settings' => __('postavke'),
         ];
     }
-
 }

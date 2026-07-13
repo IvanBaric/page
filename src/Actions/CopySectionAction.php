@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace IvanBaric\Pages\Actions;
 
 use Illuminate\Support\Facades\DB;
+use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
-use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Models\Page;
 use IvanBaric\Pages\Models\Section;
 
@@ -21,15 +21,15 @@ final class CopySectionAction
         $targetPage = $this->resolvePage($targetPage);
 
         if (! $source) {
-            return ActionResult::failure(__('Sekcija nije pronađena.'));
+            return ActionResult::error(__('Sekcija nije pronađena.'));
         }
 
         if (! $targetPage) {
-            return ActionResult::failure(__('Odabrana stranica nije pronađena.'));
+            return ActionResult::error(__('Odabrana stranica nije pronađena.'));
         }
 
         if ((int) $source->getAttribute('team_id') !== (int) $targetPage->getAttribute('team_id')) {
-            return ActionResult::failure(__('Sekciju nije moguće kopirati na odabranu stranicu.'));
+            return ActionResult::error(__('Sekciju nije moguće kopirati na odabranu stranicu.'));
         }
 
         if ($result = $this->authorizePageAction('pages.sections.manage', $source)) {
@@ -46,7 +46,6 @@ final class CopySectionAction
             $sectionCopy = $source->replicate(['uuid', 'slug', 'lock_version']);
             $sectionCopy->forceFill([
                 'page_id' => $targetPage->getKey(),
-                'team_id' => $targetPage->getAttribute('team_id'),
                 'slug' => null,
                 'sort_order' => ((int) $targetPage->sections()->max('sort_order')) + 1,
             ]);
@@ -56,7 +55,6 @@ final class CopySectionAction
                 $itemCopy = $item->replicate(['uuid', 'slug', 'lock_version']);
                 $itemCopy->forceFill([
                     'section_id' => $sectionCopy->getKey(),
-                    'team_id' => $targetPage->getAttribute('team_id'),
                     'slug' => null,
                 ]);
                 $itemCopy->save();

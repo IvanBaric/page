@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace IvanBaric\Pages\Actions;
 
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
-use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Events\SectionCreated;
 use IvanBaric\Pages\Models\Page;
 
@@ -25,7 +24,7 @@ final class CreateSectionAction
         $page = $this->resolvePage($page);
 
         if (! $page) {
-            return ActionResult::failure(__('Page not found.'));
+            return ActionResult::error(__('Stranica nije pronađena.'));
         }
 
         if ($result = $this->authorizePageAction('pages.sections.manage', $page)) {
@@ -35,15 +34,15 @@ final class CreateSectionAction
         $validator = Validator::make($data, $this->rules(), attributes: $this->attributes());
 
         if ($validator->fails()) {
-            return ActionResult::failure(__('The section could not be created.'), $validator->errors());
+            return ActionResult::error(__('Sekciju nije moguće izraditi.'), errors: $validator->errors()->toArray());
         }
 
         $validated = $validator->validated();
-        $section = DB::transaction(static fn () => $page->addSection($validated['type'], $validated));
+        $section = $page->addSection($validated['type'], $validated);
 
         SectionCreated::dispatch($section);
 
-        return ActionResult::success(__('Section created.'), $section);
+        return ActionResult::success(__('Sekcija je izrađena.'), $section);
     }
 
     /**
@@ -57,7 +56,6 @@ final class CreateSectionAction
             'subtitle' => ['nullable', 'array'],
             'description' => ['nullable', 'array'],
             'content' => ['nullable', 'array'],
-            'image' => ['nullable', 'string', 'max:2048'],
             'button_text' => ['nullable', 'array'],
             'button_url' => ['nullable', 'string', 'max:2048'],
             'is_visible' => ['nullable', 'boolean'],
@@ -72,18 +70,16 @@ final class CreateSectionAction
     private function attributes(): array
     {
         return [
-            'type' => __('section type'),
-            'title' => __('title'),
-            'subtitle' => __('subtitle'),
-            'description' => __('description'),
-            'content' => __('content'),
-            'image' => __('image'),
-            'button_text' => __('button text'),
-            'button_url' => __('button URL'),
-            'is_visible' => __('visible'),
-            'sort_order' => __('sort order'),
-            'settings' => __('settings'),
+            'type' => __('vrsta sekcije'),
+            'title' => __('naziv'),
+            'subtitle' => __('podnaslov'),
+            'description' => __('opis'),
+            'content' => __('sadržaj'),
+            'button_text' => __('tekst gumba'),
+            'button_url' => __('poveznica gumba'),
+            'is_visible' => __('vidljivost'),
+            'sort_order' => __('redoslijed'),
+            'settings' => __('postavke'),
         ];
     }
-
 }

@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace IvanBaric\Pages\Actions;
 
 use Illuminate\Support\Facades\DB;
+use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
-use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Events\SectionItemDeleted;
 use IvanBaric\Pages\Models\SectionItem;
 
@@ -20,7 +20,7 @@ final class DeleteSectionItemAction
         $item = $this->resolveSectionItem($item);
 
         if (! $item) {
-            return ActionResult::failure(__('Zapis nije pronađen.'));
+            return ActionResult::error(__('Zapis nije pronađen.'));
         }
 
         if ($result = $this->authorizePageAction('pages.sections.manage', $item)) {
@@ -28,11 +28,11 @@ final class DeleteSectionItemAction
         }
 
         $itemKey = $item->getKey();
-        $uuid = (string) $item->uuid;
+        $uuid = (string) $item->getAttribute('uuid');
 
         DB::transaction(static function () use ($item): void {
             /** @var SectionItem $lockedItem */
-            $lockedItem = SectionItem::query()
+            $lockedItem = $item->newQuery()
                 ->whereKey($item->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
@@ -44,5 +44,4 @@ final class DeleteSectionItemAction
 
         return ActionResult::success(__('Zapis je arhiviran.'));
     }
-
 }

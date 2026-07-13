@@ -7,13 +7,15 @@ namespace IvanBaric\Pages\Livewire\Admin;
 use Flux\Flux;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Pages\Actions\CopySectionAction;
 use IvanBaric\Pages\Actions\CreateSectionAction;
+use IvanBaric\Pages\Actions\DeleteSectionAction;
 use IvanBaric\Pages\Actions\MoveSectionAction;
+use IvanBaric\Pages\Actions\ReorderSectionsAction;
+use IvanBaric\Pages\Actions\ToggleSectionVisibilityAction;
+use IvanBaric\Pages\Actions\UpdateSectionAction;
 use IvanBaric\Pages\Admin\AdminSection;
 use IvanBaric\Pages\Admin\AdminSectionRegistry;
 use IvanBaric\Pages\Admin\LayoutVariant;
@@ -22,7 +24,7 @@ use IvanBaric\Pages\Livewire\Forms\SectionSettingsForm;
 use IvanBaric\Pages\Models\Page;
 use IvanBaric\Pages\Models\Section;
 use IvanBaric\Pages\Support\OnePageNavigation;
-use IvanBaric\Pages\Support\TeamResolver;
+use IvanBaric\Pages\Support\PagesModels;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
@@ -56,9 +58,8 @@ class PageShow extends Component
 
     public function mount(Page $page): void
     {
-        $pageModel = config('pages.models.page', Page::class);
+        $pageModel = PagesModels::page();
         $page = $pageModel::query()
-            ->forTeam($this->currentTeamId())
             ->where('uuid', $page->getAttribute('uuid'))
             ->first();
 
@@ -74,6 +75,15 @@ class PageShow extends Component
         if (! $this->isAvailableSectionCreatorKey($this->selectedSectionCreatorKey)) {
             $this->selectedSectionCreatorKey = $this->firstAvailableSectionCreatorKey();
         }
+
+        Flux::modal('section-create')->show();
+    }
+
+    public function cancelSectionCreator(): void
+    {
+        $this->selectedSectionType = $this->firstAvailableSectionType();
+        $this->selectedSectionCreatorKey = $this->firstAvailableSectionCreatorKey();
+        unset($this->selectedSectionDetails);
     }
 
     public function selectSectionCreatorEntry(string $key): void
@@ -84,6 +94,8 @@ class PageShow extends Component
             if (str_starts_with($key, 'section:')) {
                 $this->selectedSectionType = substr($key, 8);
             }
+
+            unset($this->selectedSectionDetails);
         }
     }
 
@@ -94,7 +106,7 @@ class PageShow extends Component
 
     public function addSelectedSection(): void
     {
-        $details = $this->selectedSectionDetails;
+        $details = $this->selectedSectionDetails();
 
         if (($details['kind'] ?? null) !== 'section') {
             Flux::toast(variant: 'danger', text: __('Odaberite sekciju koju želite dodati.'));
@@ -139,59 +151,51 @@ class PageShow extends Component
         Flux::toast(variant: 'success', text: __('Sekcija je dodana.'));
     }
 
-    public function toggle(string $uuid): void
+    public function toggle(string $uuid, ToggleSectionVisibilityAction $action): void
     {
         $section = $this->findSection($uuid);
-        $section->isVisible() ? $section->hide() : $section->show();
+        $result = $action->handle($section);
 
         unset($this->sections);
-
-        Flux::toast(
-            variant: $section->fresh()->isVisible() ? 'success' : 'warning',
-            text: $section->fresh()->isVisible() ? __('Sekcija je uključena.') : __('Sekcija je isključena.'),
-        );
+        $this->toastFromResult($result);
     }
 
-    public function reorderSection(string $uuid, int $position): void
+    public function reorderSection(string $uuid, int $position, ReorderSectionsAction $action): void
     {
-        DB::transaction(function () use ($uuid, $position): void {
-            $sections = $this->page
-                ->sections()
-                ->orderBy('sort_order')
-                ->orderBy('created_at')
-                ->get();
+        $sections = $this->page->sections()->ordered()->get();
+        $moving = $sections->firstWhere('uuid', $uuid);
 
-            $moving = $sections->firstWhere('uuid', $uuid);
+        if (! $moving instanceof Section) {
+            return;
+        }
 
-            if (! $moving instanceof Section) {
-                return;
-            }
-
-            $sections = $sections
-                ->reject(fn (Section $current): bool => $current->is($moving))
-                ->values();
-
-            $sections->splice(max(0, min($position, $sections->count())), 0, [$moving]);
-
-            $sections->values()->each(function (Section $current, int $index): void {
-                $current->forceFill(['sort_order' => $index])->save();
-            });
-        });
+        $sections = $sections->reject(fn (Section $current): bool => $current->is($moving))->values();
+        $sections->splice(max(0, min($position, $sections->count())), 0, [$moving]);
+        $result = $action->handle($this->page, $sections->pluck('uuid')->all());
 
         unset($this->sections);
-
-        Flux::toast(variant: 'success', text: __('Redoslijed sekcija je spremljen.'));
+        $this->toastFromResult($result);
     }
 
     public function edit(string $uuid): void
     {
         $section = $this->findSection($uuid);
 
-        $this->editingUuid = $uuid;
+        $this->reset('editingUuid');
+        $this->form->reset();
+        $this->editingUuid = (string) $section->uuid;
         $this->form->fillFromSection($section);
+
+        Flux::modal('section-form')->show();
     }
 
-    public function saveSection(): void
+    public function cancelSectionForm(): void
+    {
+        $this->reset('editingUuid');
+        $this->form->reset();
+    }
+
+    public function saveSection(UpdateSectionAction $action): void
     {
         try {
             $data = $this->form->data();
@@ -201,7 +205,17 @@ class PageShow extends Component
             throw $exception;
         }
 
-        $this->findSection((string) $this->editingUuid)->fill($data)->save();
+        $section = $this->findSection((string) $this->editingUuid);
+        $result = $action->handle($section, $data + [
+            'type' => (string) $section->getAttribute('type'),
+            'lock_version' => (int) $section->getAttribute('lock_version'),
+        ]);
+
+        if ($result->failed()) {
+            $this->toastFromResult($result);
+
+            return;
+        }
 
         $this->editingUuid = null;
         unset($this->sections);
@@ -212,19 +226,39 @@ class PageShow extends Component
 
     public function confirmDelete(string $uuid): void
     {
-        $this->deletingUuid = $uuid;
+        $this->deletingUuid = (string) $this->findSection($uuid)->uuid;
+        Flux::modal('section-delete')->show();
+    }
+
+    public function cancelDelete(): void
+    {
+        $this->deletingUuid = null;
     }
 
     public function confirmCopy(string $uuid): void
     {
-        $this->copyingUuid = $uuid;
+        $this->copyingUuid = (string) $this->findSection($uuid)->uuid;
         $this->copyTargetPageUuid = (string) $this->page->getAttribute('uuid');
+        Flux::modal('section-copy')->show();
+    }
+
+    public function cancelCopy(): void
+    {
+        $this->copyingUuid = null;
+        $this->copyTargetPageUuid = null;
     }
 
     public function confirmMove(string $uuid): void
     {
-        $this->movingUuid = $uuid;
+        $this->movingUuid = (string) $this->findSection($uuid)->uuid;
         $this->moveTargetPageUuid = $this->defaultMoveTargetPageUuid();
+        Flux::modal('section-move')->show();
+    }
+
+    public function cancelMove(): void
+    {
+        $this->movingUuid = null;
+        $this->moveTargetPageUuid = null;
     }
 
     public function copySection(CopySectionAction $action): void
@@ -292,19 +326,25 @@ class PageShow extends Component
         $this->redirectRoute($this->pageShowRouteName(), ['page' => $targetPage->uuid], navigate: true);
     }
 
-    public function delete(): void
+    public function delete(DeleteSectionAction $action): void
     {
-        $this->findSection((string) $this->deletingUuid)->archive();
+        $result = $action->handle($this->findSection((string) $this->deletingUuid));
+
+        if ($result->failed()) {
+            $this->toastFromResult($result);
+
+            return;
+        }
 
         $this->deletingUuid = null;
 
         unset($this->sections);
 
         Flux::modal('section-delete')->close();
-        Flux::toast(variant: 'success', text: __('Sekcija je arhivirana.'));
+        $this->toastFromResult($result);
     }
 
-    /** @return Collection<int, Model> */
+    /** @return Collection<int, Section> */
     #[Computed]
     public function sections(): Collection
     {
@@ -315,10 +355,9 @@ class PageShow extends Component
     #[Computed]
     public function copyTargetPages(): Collection
     {
-        $pageModel = config('pages.models.page', Page::class);
+        $pageModel = PagesModels::page();
 
         return $pageModel::query()
-            ->forTeam($this->currentTeamId())
             ->ordered()
             ->get();
     }
@@ -335,9 +374,8 @@ class PageShow extends Component
     #[Computed]
     public function onePageNavigationAvailable(): bool
     {
-        $pageModel = config('pages.models.page', Page::class);
+        $pageModel = PagesModels::page();
         $publicPages = $pageModel::query()
-            ->forTeam($this->currentTeamId())
             ->published()
             ->ordered()
             ->get();
@@ -352,11 +390,11 @@ class PageShow extends Component
     #[Computed]
     public function sectionNavigationSettingsAvailable(): bool
     {
-        if (! $this->onePageNavigationAvailable || ! $this->editingUuid) {
+        if (! $this->onePageNavigationAvailable() || ! $this->editingUuid) {
             return false;
         }
 
-        $section = $this->sections->firstWhere('uuid', $this->editingUuid);
+        $section = $this->sections()->firstWhere('uuid', $this->editingUuid);
 
         return $section instanceof Section
             && app(OnePageNavigation::class)->canShowSection($section);
@@ -367,7 +405,7 @@ class PageShow extends Component
     public function sectionCreatorSections(): array
     {
         $registry = app(AdminSectionRegistry::class);
-        $existingCounts = $this->sections->countBy('type');
+        $existingCounts = $this->sections()->countBy('type');
 
         return collect($this->sectionTypeOptions())
             ->reject(fn (array $config, string $type): bool => $this->isHiddenInSectionCreator($type))
@@ -440,7 +478,7 @@ class PageShow extends Component
     #[Computed]
     public function selectedSectionDetails(): ?array
     {
-        $entries = collect($this->sectionCreatorEntries);
+        $entries = collect($this->sectionCreatorEntries());
         $entry = $entries->firstWhere('key', $this->selectedSectionCreatorKey) ?? $entries->first();
 
         if (! is_array($entry)) {
@@ -472,7 +510,7 @@ class PageShow extends Component
     private function sectionCreatorDetailsForType(string $type): array
     {
         $definition = app(AdminSectionRegistry::class)->get($type);
-        $existingCounts = $this->sections->countBy('type');
+        $existingCounts = $this->sections()->countBy('type');
         $variants = $this->layoutVariantsForSection($definition);
         $previewVariant = $variants[0] ?? [
             'value' => $type,
@@ -529,19 +567,12 @@ class PageShow extends Component
     {
         $section = $this->page->sections()->where('uuid', $uuid)->firstOrFail();
 
-        abort_unless($section instanceof Section, 404);
-
         return $section;
     }
 
     private function defaultMoveTargetPageUuid(): ?string
     {
         return $this->moveTargetPages()->first()?->uuid;
-    }
-
-    private function currentTeamId(): ?int
-    {
-        return app(TeamResolver::class)->resolve();
     }
 
     private function currentLocaleCode(): string
@@ -569,7 +600,7 @@ class PageShow extends Component
 
     private function firstAvailableSectionCreatorKey(): string
     {
-        $entries = $this->sectionCreatorEntries;
+        $entries = $this->sectionCreatorEntries();
         $entry = $entries[0] ?? null;
 
         return is_array($entry) ? (string) $entry['key'] : '';
@@ -587,7 +618,7 @@ class PageShow extends Component
 
     private function isAvailableSectionCreatorKey(string $key): bool
     {
-        return collect($this->sectionCreatorEntries)->contains(
+        return collect($this->sectionCreatorEntries())->contains(
             static fn (array $entry): bool => (string) $entry['key'] === $key,
         );
     }
@@ -885,6 +916,6 @@ class PageShow extends Component
 
     private function resultSuccessful(mixed $result): bool
     {
-        return (bool) ($result->success ?? $result->successful ?? false);
+        return (bool) ($result->success ?? $result->success ?? false);
     }
 }

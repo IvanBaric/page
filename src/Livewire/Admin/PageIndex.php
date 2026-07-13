@@ -5,18 +5,24 @@ namespace IvanBaric\Pages\Livewire\Admin;
 use Flux\Flux;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
+use IvanBaric\Corexis\Data\ActionResult;
+use IvanBaric\Pages\Actions\CreatePageAction;
 use IvanBaric\Pages\Actions\DeleteAdminPageAction;
 use IvanBaric\Pages\Actions\ReorderPageAction;
 use IvanBaric\Pages\Actions\TogglePagePublishedAction;
-use IvanBaric\Pages\Data\ActionResult;
+use IvanBaric\Pages\Actions\UpdatePageAction;
+use IvanBaric\Pages\Admin\AdminSectionRegistry;
 use IvanBaric\Pages\Models\Page;
-use IvanBaric\Pages\Models\Section;
-use IvanBaric\Pages\Support\TeamResolver;
+use IvanBaric\Pages\Support\PagesConfigResolver;
+use IvanBaric\Pages\Support\PagesModels;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -28,8 +34,10 @@ class PageIndex extends Component
 
     public string $status = 'all';
 
+    #[Locked]
     public string $part = 'pages';
 
+    #[Locked]
     public ?string $editingPageUuid = null;
 
     public string $pageTitle = '';
@@ -38,6 +46,7 @@ class PageIndex extends Component
 
     public string $newPageTitle = '';
 
+    #[Locked]
     public ?string $deletingPageUuid = null;
 
     public function mount(): void
@@ -68,7 +77,7 @@ class PageIndex extends Component
         }
 
         $page = $this->editablePage($uuid);
-        $result = $action->handle($page, $position, $this->currentTeamId(), $this->adminPageKeys(), $this->adminPageSlugs());
+        $result = $action->handle($page, $position, $this->adminPageKeys(), $this->adminPageSlugs());
 
         unset($this->pages);
 
@@ -84,10 +93,22 @@ class PageIndex extends Component
         $this->toastFromResult($result);
     }
 
+    public function openCreatePage(): void
+    {
+        $this->reset('newPageTitle');
+        Flux::modal('page-create-form')->show();
+    }
+
+    public function cancelCreatePage(): void
+    {
+        $this->reset('newPageTitle');
+    }
+
     public function editPage(string $uuid): void
     {
         $page = $this->editablePage($uuid);
 
+        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt');
         $this->editingPageUuid = $page->uuid;
         $this->pageTitle = $page->localized('title');
         $this->pageExcerpt = $page->localized('excerpt') ?: $page->localized('content');
@@ -95,7 +116,12 @@ class PageIndex extends Component
         Flux::modal('page-title-form')->show();
     }
 
-    public function savePage(): void
+    public function cancelPageTitleForm(): void
+    {
+        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt');
+    }
+
+    public function savePage(UpdatePageAction $action): void
     {
         $validated = $this->validate([
             'pageTitle' => ['required', 'string', 'max:120'],
@@ -113,11 +139,25 @@ class PageIndex extends Component
         $excerpt = trim((string) $validated['pageExcerpt']);
         $locale = $this->locale();
 
-        $page->forceFill([
+        $result = $action->handle($page, [
             'title' => [$locale => trim((string) $validated['pageTitle'])],
             'excerpt' => $excerpt !== '' ? [$locale => $excerpt] : null,
             'content' => $excerpt !== '' ? [$locale => $excerpt] : $page->getAttribute('content'),
-        ])->save();
+            'status' => $page->getAttribute('status'),
+            'template' => $page->getAttribute('template'),
+            'is_home' => (bool) $page->getAttribute('is_home'),
+            'is_published' => (bool) $page->getAttribute('is_published'),
+            'published_at' => $page->getAttribute('published_at'),
+            'sort_order' => (int) $page->getAttribute('sort_order'),
+            'settings' => $page->getAttribute('settings'),
+            'lock_version' => (int) $page->getAttribute('lock_version'),
+        ]);
+
+        if ($result->failed()) {
+            $this->toastFromResult($result);
+
+            return;
+        }
 
         $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt');
         unset($this->pages);
@@ -126,7 +166,7 @@ class PageIndex extends Component
         Flux::toast(variant: 'success', text: __('Naziv stranice je spremljen.'));
     }
 
-    public function createPage(): void
+    public function createPage(CreatePageAction $action): void
     {
         $validated = $this->validate([
             'newPageTitle' => ['required', 'string', 'max:120'],
@@ -134,28 +174,39 @@ class PageIndex extends Component
             'newPageTitle' => __('naziv stranice'),
         ]);
 
-        $model = config('pages.models.page', Page::class);
+        $model = PagesModels::page();
         $title = trim((string) $validated['newPageTitle']);
-        $teamId = $this->currentTeamId();
         $locale = $this->locale();
 
-        $page = $model::query()->create([
-            'team_id' => $teamId,
+        $result = $action->handle([
             'title' => [$locale => $title],
             'excerpt' => null,
             'content' => null,
             'status' => 'published',
-            'template' => $this->currentTemplateKey,
+            'template' => $this->currentTemplateKey(),
             'is_home' => false,
             'is_published' => true,
             'published_at' => now(),
-            'sort_order' => ((int) $model::query()->forTeam($teamId)->max('sort_order')) + 1,
+            'sort_order' => ((int) $model::query()->max('sort_order')) + 1,
         ]);
+
+        if ($result->failed() || ! $result->data instanceof Page) {
+            $this->toastFromResult($result);
+
+            return;
+        }
+
+        $page = $result->data;
 
         $this->reset('newPageTitle');
         unset($this->pages, $this->stats);
 
         Flux::modal('page-create-form')->close();
+
+        session()->flash('velora.toast', [
+            'text' => __('Stranica je izrađena.'),
+            'variant' => 'success',
+        ]);
 
         $this->redirectRoute($this->pageShowRouteName(), ['page' => $page->uuid], navigate: true);
     }
@@ -170,7 +221,13 @@ class PageIndex extends Component
             return;
         }
 
-        $this->deletingPageUuid = $uuid;
+        $this->deletingPageUuid = (string) $page->uuid;
+        Flux::modal('page-delete')->show();
+    }
+
+    public function cancelDeletePage(): void
+    {
+        $this->deletingPageUuid = null;
     }
 
     public function deletePage(DeleteAdminPageAction $action): void
@@ -202,10 +259,9 @@ class PageIndex extends Component
     #[Computed]
     public function pages(): Paginator
     {
-        $model = config('pages.models.page', Page::class);
+        $model = PagesModels::page();
 
         return $model::query()
-            ->forTeam($this->currentTeamId())
             ->tap(fn (Builder $query): Builder => $this->adminPagesQuery($query))
             ->withCount('sections')
             ->when($this->search !== '', function (Builder $query): void {
@@ -239,12 +295,12 @@ class PageIndex extends Component
     #[Computed]
     public function stats(): array
     {
-        $model = config('pages.models.page', Page::class);
+        $model = PagesModels::page();
 
         return [
-            'total' => $model::query()->forTeam($this->currentTeamId())->tap(fn (Builder $query): Builder => $this->adminPagesQuery($query))->count(),
-            'active' => $model::query()->forTeam($this->currentTeamId())->tap(fn (Builder $query): Builder => $this->adminPagesQuery($query))->where('is_published', true)->count(),
-            'inactive' => $model::query()->forTeam($this->currentTeamId())->tap(fn (Builder $query): Builder => $this->adminPagesQuery($query))->where('is_published', false)->count(),
+            'total' => $model::query()->tap(fn (Builder $query): Builder => $this->adminPagesQuery($query))->count(),
+            'active' => $model::query()->tap(fn (Builder $query): Builder => $this->adminPagesQuery($query))->where('is_published', true)->count(),
+            'inactive' => $model::query()->tap(fn (Builder $query): Builder => $this->adminPagesQuery($query))->where('is_published', false)->count(),
             'sections' => $this->sectionsCountForAdminPages(),
         ];
     }
@@ -279,19 +335,16 @@ class PageIndex extends Component
     #[Computed]
     public function organization(): ?Model
     {
-        $model = config('pages.admin_index.singleton_model');
+        $model = PagesConfigResolver::singletonModel();
 
-        if (! is_string($model) || $model === '' || ! class_exists($model)) {
+        if ($model === null) {
             return null;
         }
 
         $query = $model::query();
         $teamId = $this->currentTeamId();
-        $teamScope = (string) config('pages.admin_index.singleton_team_scope', 'forTeam');
 
-        if ($teamId !== null && method_exists($model, 'scope'.ucfirst($teamScope))) {
-            $query->{$teamScope}($teamId);
-        } elseif ($teamId !== null && Schema::hasColumn((new $model)->getTable(), 'team_id')) {
+        if ($teamId !== null && Schema::hasColumn((new $model)->getTable(), 'team_id')) {
             $query->where('team_id', $teamId);
         }
 
@@ -304,13 +357,13 @@ class PageIndex extends Component
         return $query->first();
     }
 
+    /** @return EloquentCollection<int, Page> */
     #[Computed]
-    public function publicPages()
+    public function publicPages(): EloquentCollection
     {
-        $model = config('pages.models.page', Page::class);
+        $model = PagesModels::page();
 
         return $model::query()
-            ->forTeam($this->currentTeamId())
             ->published()
             ->ordered()
             ->get();
@@ -319,7 +372,7 @@ class PageIndex extends Component
     #[Computed]
     public function currentTemplateKey(): string
     {
-        $page = $this->publicPages->first();
+        $page = $this->publicPages()->first();
 
         if ($page && function_exists('template_engine')) {
             return template_engine()->resolveTemplateKey($page);
@@ -332,15 +385,76 @@ class PageIndex extends Component
     public function currentTemplateLabel(): string
     {
         if (function_exists('template_engine')) {
-            return template_engine()->template($this->currentTemplateKey)->translatedLabel();
+            return template_engine()->template($this->currentTemplateKey())->translatedLabel();
         }
 
-        return (string) data_get(config('pages.templates'), $this->currentTemplateKey.'.label', $this->currentTemplateKey);
+        return (string) data_get(config('pages.templates'), $this->currentTemplateKey().'.label', $this->currentTemplateKey());
     }
 
     public function pageShowRouteName(): string
     {
         return (string) config('pages.admin_routes.page_show', 'admin.pages.show');
+    }
+
+    public function isTemplatePart(): bool
+    {
+        return $this->part !== 'pages'
+            && array_key_exists($this->part, (array) config('pages.admin_index.template_parts', []));
+    }
+
+    public function partLabel(string $part): string
+    {
+        $configured = config('pages.admin_index.template_parts.'.$part.'.label');
+
+        if (filled($configured)) {
+            return (string) $configured;
+        }
+
+        return match ($part) {
+            'header' => __('Zaglavlje'),
+            'footer' => __('Podnožje'),
+            'sections' => __('Sekcije'),
+            default => Str::of($part)->replace(['-', '_'], ' ')->headline()->toString(),
+        };
+    }
+
+    public function partDescription(string $part): string
+    {
+        $configured = config('pages.admin_index.template_parts.'.$part.'.description');
+
+        if (filled($configured)) {
+            return (string) $configured;
+        }
+
+        return match ($part) {
+            'header' => __('Pregled javnog zaglavlja. Linkovi dolaze iz objavljenih stranica i njihovog redoslijeda.'),
+            'footer' => __('Uredite tekst javnog podnožja. Linkovi dolaze iz objavljenih stranica i njihovog redoslijeda.'),
+            'sections' => __('Uredite zajednički izgled naziva i opisa sekcija na javnoj stranici.'),
+            default => __('Uredite ovaj dio javnog templatea.'),
+        };
+    }
+
+    /** @return array{title: string, description: string} */
+    public function editorHeader(string $part): array
+    {
+        $definition = app(AdminSectionRegistry::class)->get($this->templatePartDefinitionKey($part));
+        $tabs = $definition?->tabsValue() ?? [];
+        $requestedTab = (string) request()->query('editorTab', '');
+        $activeTab = collect($tabs)->first(
+            static fn ($tab): bool => $tab->key() === $requestedTab,
+        ) ?? ($tabs[0] ?? null);
+
+        if ($activeTab === null) {
+            return [
+                'title' => $this->partLabel($part),
+                'description' => $this->partDescription($part),
+            ];
+        }
+
+        return [
+            'title' => $this->partLabel($part),
+            'description' => (string) ($activeTab->optionValue('description', $this->partDescription($part)) ?? $this->partDescription($part)),
+        ];
     }
 
     public function templatePartDefinitionKey(string $part): string
@@ -352,7 +466,7 @@ class PageIndex extends Component
     {
         $template = (string) config('pages.admin_index.template_parts.'.$part.'.template', '');
 
-        return $template === '' || $template === $this->currentTemplateKey;
+        return $template === '' || $template === $this->currentTemplateKey();
     }
 
     public function missingSingletonSubjectText(): string
@@ -367,10 +481,9 @@ class PageIndex extends Component
 
     private function editablePage(string $uuid): Page
     {
-        $model = config('pages.models.page', Page::class);
+        $model = PagesModels::page();
 
         return $model::query()
-            ->forTeam($this->currentTeamId())
             ->tap(fn (Builder $query): Builder => $this->adminPagesQuery($query))
             ->where('uuid', $uuid)
             ->firstOrFail();
@@ -378,19 +491,26 @@ class PageIndex extends Component
 
     private function currentTeamId(): ?int
     {
-        return app(TeamResolver::class)->resolve();
+        $tenantId = corexis_tenant_id();
+
+        return is_numeric($tenantId) ? (int) $tenantId : null;
     }
 
     private function sectionsCountForAdminPages(): int
     {
-        $model = config('pages.models.section', Section::class);
+        $pageIds = PagesModels::page()::query()
+            ->tap(fn (Builder $query): Builder => $this->adminPagesQuery($query))
+            ->pluck('id');
 
-        return $model::query()
-            ->forTeam($this->currentTeamId())
-            ->whereHas('page', fn (Builder $query): Builder => $this->adminPagesQuery($query))
+        return PagesModels::section()::query()
+            ->whereIn('page_id', $pageIds)
             ->count();
     }
 
+    /**
+     * @param  Builder<Page>  $query
+     * @return Builder<Page>
+     */
     private function adminPagesQuery(Builder $query): Builder
     {
         if ($this->hasPageKeyColumn()) {
@@ -443,7 +563,7 @@ class PageIndex extends Component
 
     private function hasPageKeyColumn(): bool
     {
-        return Schema::hasColumn(config('pages.tables.pages', 'pages'), 'page_key');
+        return Schema::hasColumn(PagesConfigResolver::pagesTable(), 'page_key');
     }
 
     private function locale(): string
@@ -455,6 +575,6 @@ class PageIndex extends Component
 
     private function toastFromResult(ActionResult $result): void
     {
-        Flux::toast(variant: $result->successful ? 'success' : 'danger', text: $result->message);
+        Flux::toast(variant: $result->success ? 'success' : 'danger', text: $result->message);
     }
 }

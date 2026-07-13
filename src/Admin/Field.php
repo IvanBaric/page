@@ -6,13 +6,16 @@ namespace IvanBaric\Pages\Admin;
 
 final class Field
 {
-    /** @var array<int, string> */
+    /** @var array<int, mixed> */
     private array $rules = [];
 
     /** @var array<string, mixed> */
     private array $options = [];
 
-    /** @param array<string, mixed> $options */
+    /**
+     * @param  array<int, mixed>  $rules
+     * @param  array<string, mixed>  $options
+     */
     private function __construct(
         private readonly string $key,
         private readonly string $type,
@@ -135,6 +138,11 @@ final class Field
     public function size(string $size): self
     {
         return $this->option('size', $size);
+    }
+
+    public function fit(string $fit): self
+    {
+        return $this->option('fit', $fit);
     }
 
     public function help(string $help): self

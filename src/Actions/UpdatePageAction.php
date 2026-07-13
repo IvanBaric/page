@@ -4,14 +4,13 @@ declare(strict_types=1);
 
 namespace IvanBaric\Pages\Actions;
 
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use IvanBaric\Corexis\Concerns\UsesOptimisticLocking;
+use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
-use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Events\PageUpdated;
 use IvanBaric\Pages\Models\Page;
 
@@ -27,7 +26,7 @@ final class UpdatePageAction
         $page = $this->resolvePage($page);
 
         if (! $page) {
-            return ActionResult::failure(__('Page not found.'));
+            return ActionResult::error(__('Stranica nije pronađena.'));
         }
 
         if ($result = $this->authorizePageAction('pages.update', $page)) {
@@ -37,14 +36,14 @@ final class UpdatePageAction
         $validator = Validator::make($data, $this->rules(), attributes: $this->attributes());
 
         if ($validator->fails()) {
-            return ActionResult::failure(__('The page could not be updated.'), $validator->errors());
+            return ActionResult::error(__('Stranicu nije moguće ažurirati.'), errors: $validator->errors()->toArray());
         }
 
         $data = $validator->validated();
         $expectedLockVersion = $this->pullExpectedLockVersion($data);
 
-        if (($data['is_home'] ?? false) && $this->homeExists($page, $data['team_id'] ?? $page->team_id)) {
-            return ActionResult::failure(__('A home page already exists for this team.'));
+        if (($data['is_home'] ?? false) && $this->homeExists($page)) {
+            return ActionResult::error(__('Naslovnica već postoji.'));
         }
 
         $saved = DB::transaction(function () use ($page, $data, $expectedLockVersion): bool {
@@ -52,13 +51,13 @@ final class UpdatePageAction
         });
 
         if (! $saved) {
-            return ActionResult::fromCorexis($this->staleModelResult());
+            return $this->staleModelResult();
         }
 
         $page->refresh();
         PageUpdated::dispatch($page);
 
-        return ActionResult::success(__('Page updated.'), $page);
+        return ActionResult::success(__('Stranica je ažurirana.'), $page);
     }
 
     /**
@@ -67,7 +66,6 @@ final class UpdatePageAction
     private function rules(): array
     {
         return [
-            'team_id' => ['nullable', 'integer'],
             'title' => ['required', 'array'],
             'excerpt' => ['nullable', 'array'],
             'content' => ['nullable', 'array'],
@@ -88,24 +86,23 @@ final class UpdatePageAction
     private function attributes(): array
     {
         return [
-            'title' => __('title'),
-            'excerpt' => __('excerpt'),
-            'content' => __('content'),
+            'title' => __('naziv'),
+            'excerpt' => __('sažetak'),
+            'content' => __('sadržaj'),
             'status' => __('status'),
-            'template' => __('template'),
-            'is_home' => __('home page'),
-            'is_published' => __('published'),
-            'published_at' => __('published date'),
-            'sort_order' => __('sort order'),
-            'settings' => __('settings'),
+            'template' => __('predložak'),
+            'is_home' => __('naslovnica'),
+            'is_published' => __('objavljeno'),
+            'published_at' => __('datum objave'),
+            'sort_order' => __('redoslijed'),
+            'settings' => __('postavke'),
         ];
     }
 
-    private function homeExists(Page $page, ?int $teamId): bool
+    private function homeExists(Page $page): bool
     {
         return $page->newQuery()
             ->where('is_home', true)
-            ->when($teamId === null, fn (Builder $query) => $query->whereNull('team_id'), fn (Builder $query) => $query->where('team_id', $teamId))
             ->whereKeyNot($page->getKey())
             ->exists();
     }

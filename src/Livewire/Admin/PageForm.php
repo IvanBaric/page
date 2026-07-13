@@ -3,6 +3,7 @@
 namespace IvanBaric\Pages\Livewire\Admin;
 
 use Flux\Flux;
+use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
 use IvanBaric\Pages\Actions\CreatePageAction;
 use IvanBaric\Pages\Actions\UpdatePageAction;
@@ -17,10 +18,13 @@ final class PageForm extends Component
 
     public string $locale = 'en';
 
+    /** @var array<string, string> */
     public array $title = ['en' => ''];
 
+    /** @var array<string, string> */
     public array $excerpt = ['en' => ''];
 
+    /** @var array<string, string> */
     public array $content = ['en' => ''];
 
     public string $status = '';
@@ -61,9 +65,11 @@ final class PageForm extends Component
             ? app(UpdatePageAction::class)->handle($this->page->uuid, $payload)
             : app(CreatePageAction::class)->handle($payload);
 
-        if (! $result->successful) {
-            foreach ($result->data?->messages() ?? [] as $field => $messages) {
-                $this->addError($field, $messages[0]);
+        if (! $result->success) {
+            foreach ($result->errors as $field => $messages) {
+                if (is_array($messages) && isset($messages[0]) && is_string($messages[0])) {
+                    $this->addError((string) $field, $messages[0]);
+                }
             }
 
             Flux::toast(variant: 'danger', text: $result->message);
@@ -77,11 +83,11 @@ final class PageForm extends Component
         $this->redirectRoute(config('pages.admin.name_prefix', 'admin.pages.').'edit', ['page' => $this->page->uuid], navigate: true);
     }
 
-    public function render()
+    public function render(): View
     {
         return view('pages::livewire.admin.page-form')
             ->layout(config('pages.admin_ui.layout', 'layouts.app'), [
-                'title' => $this->page?->exists ? __('Edit page') : __('Create page'),
+                'title' => $this->page?->exists ? __('Uredi stranicu') : __('Izradi stranicu'),
             ]);
     }
 
@@ -101,7 +107,7 @@ final class PageForm extends Component
         $this->is_published = $page->is_published;
         $this->published_at = $page->published_at?->format('Y-m-d\TH:i');
         $this->sort_order = $page->sort_order;
-        $this->lock_version = method_exists($page, 'getLockVersion') ? $page->getLockVersion() : (int) ($page->lock_version ?? 0);
+        $this->lock_version = $page->getLockVersion();
     }
 
     /**

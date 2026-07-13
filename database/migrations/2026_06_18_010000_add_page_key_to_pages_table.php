@@ -4,12 +4,13 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use IvanBaric\Pages\Support\PagesConfigResolver;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        $table = config('pages.tables.pages', 'pages');
+        $table = PagesConfigResolver::pagesTable();
 
         if (! Schema::hasTable($table)) {
             return;
@@ -37,7 +38,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        $table = config('pages.tables.pages', 'pages');
+        $table = PagesConfigResolver::pagesTable();
 
         if (Schema::hasTable($table) && Schema::hasColumn($table, 'page_key')) {
             Schema::table($table, function (Blueprint $blueprint) use ($table): void {
@@ -82,8 +83,8 @@ return new class extends Migration
             'o nama', 'o udruzi', 'o zadruzi' => 'about',
             'kontakt' => 'contact',
             default => match ($slug) {
-            'o-udruzi' => 'about',
-            default => $slug,
+                'o-udruzi' => 'about',
+                default => $slug,
             },
         });
     }

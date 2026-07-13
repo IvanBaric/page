@@ -96,6 +96,10 @@ final class AdminSectionRegistry
                 return [$provider->key() => $provider];
             }
 
+            if (! is_object($provider)) {
+                return [];
+            }
+
             if (method_exists($provider, 'definitions')) {
                 return $this->collect($provider->definitions());
             }

@@ -8,9 +8,11 @@
             {{ __('Back') }}
         </flux:button>
     </div>
-    <form wire:submit="save" class="space-y-12">
+    <form wire:submit="save" wire:loading.class="admin-panel-content-loading" wire:target="save" class="relative space-y-12">
+        <x-admin-ui::loading-overlay target="save" :text="__('Spremanje...')" />
+
         <div class="grid gap-6 md:grid-cols-2">
-            <flux:select wire:model="type" :label="__('Section type')">
+            <flux:select wire:model="type" variant="listbox" :label="__('Section type')">
                 @foreach (config('pages.section_types', []) as $value => $typeConfig)
                     <flux:select.option :value="$value">{{ __($typeConfig['label'] ?? $value) }}</flux:select.option>
                 @endforeach
@@ -22,9 +24,9 @@
             <flux:checkbox wire:model="is_visible" :label="__('Visible')" />
         </div>
         <div class="flex items-center gap-3">
-            <flux:button variant="primary" type="submit">
+            <x-admin-ui::submit-button target="save">
                 {{ $editingUuid ? __('Update section') : __('Add section') }}
-            </flux:button>
+            </x-admin-ui::submit-button>
         </div>
     </form>
     <flux:table>

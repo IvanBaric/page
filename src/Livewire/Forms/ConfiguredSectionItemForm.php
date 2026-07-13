@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace IvanBaric\Pages\Livewire\Forms;
 
+use Illuminate\Validation\ValidationException;
 use IvanBaric\Pages\Models\Section;
 use IvanBaric\Pages\Models\SectionItem;
 use IvanBaric\Pages\Support\YouTubeVideo;
-use Illuminate\Validation\ValidationException;
 use Livewire\Form;
 
 final class ConfiguredSectionItemForm extends Form
@@ -105,7 +105,7 @@ final class ConfiguredSectionItemForm extends Form
             'date' => __('Unesite ispravan datum.'),
             'date_format' => __('Unesite vrijeme u obliku HH:MM.'),
             'customData.ends_at.after_or_equal' => __('Vrijeme završetka ne smije biti ranije od vremena početka.'),
-        ], $this->customMessages);
+        ], corexis_image_upload()->messages('imageUpload'), corexis_image_upload()->messages('form.imageUpload'), $this->customMessages);
     }
 
     /**
@@ -141,7 +141,7 @@ final class ConfiguredSectionItemForm extends Form
         $this->title = $item->localized('title');
         $this->subtitle = $item->localized('subtitle') ?: null;
         $this->content = $item->localized('content') ?: $item->localized('description') ?: null;
-        $this->image = method_exists($item, 'imageUrl') ? $item->imageUrl() : $item->getAttribute('image');
+        $this->image = $item->imageUrl();
         $this->imageUpload = null;
         $this->removeImage = false;
         $this->icon = $item->getAttribute('icon');

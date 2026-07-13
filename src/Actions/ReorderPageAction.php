@@ -6,22 +6,36 @@ namespace IvanBaric\Pages\Actions;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use IvanBaric\Pages\Data\ActionResult;
+use IvanBaric\Corexis\Data\ActionResult;
+use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
+use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
 use IvanBaric\Pages\Models\Page;
+use IvanBaric\Pages\Support\PagesConfigResolver;
 
 final class ReorderPageAction
 {
+    use AuthorizesPageActions, ResolvesPageModels;
+
     /**
-     * @param array<int, string> $keys
-     * @param array<int, string> $slugs
+     * @param  array<int, string>  $keys
+     * @param  array<int, string>  $slugs
      */
-    public function handle(Page $page, int $position, ?int $teamId, array $keys, array $slugs = []): ActionResult
+    public function handle(Page $page, int $position, array $keys, array $slugs = []): ActionResult
     {
-        DB::transaction(function () use ($page, $position, $teamId, $keys, $slugs): void {
+        $page = $this->resolvePage($page);
+
+        if (! $page) {
+            return ActionResult::error(__('Stranica nije pronađena.'));
+        }
+
+        if ($result = $this->authorizePageAction('pages.update', $page)) {
+            return $result;
+        }
+
+        DB::transaction(function () use ($page, $position, $keys, $slugs): void {
             $pages = $page::query()
-                ->forTeam($teamId)
                 ->when(
-                    Schema::hasColumn(config('pages.tables.pages', 'pages'), 'page_key'),
+                    Schema::hasColumn(PagesConfigResolver::pagesTable(), 'page_key'),
                     fn ($query) => $query->where(function ($query) use ($keys, $slugs): void {
                         $query->whereIn('page_key', $keys)
                             ->orWhere(function ($query) use ($slugs): void {

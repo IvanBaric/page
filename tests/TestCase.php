@@ -2,8 +2,8 @@
 
 namespace IvanBaric\Pages\Tests;
 
-use IvanBaric\Pages\PagesServiceProvider;
 use IvanBaric\Corexis\CorexisServiceProvider;
+use IvanBaric\Pages\PagesServiceProvider;
 use Livewire\LivewireServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 

@@ -4,57 +4,53 @@ namespace IvanBaric\Pages\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use IvanBaric\Corexis\Concerns\BelongsToTenant;
 use IvanBaric\Corexis\Concerns\HasLockVersion;
-use IvanBaric\Pages\Support\SlugGenerator;
-use IvanBaric\Pages\Support\TeamResolver;
+use IvanBaric\Corexis\Concerns\HasUniqueSlug;
+use IvanBaric\Corexis\Concerns\HasUuid;
+use IvanBaric\Gallery\Concerns\HasGalleries;
+use IvanBaric\Pages\Support\PagesConfigResolver;
+use IvanBaric\Pages\Support\PagesModels;
 
+/**
+ * @property int $id
+ * @property int|null $team_id
+ * @property string $uuid
+ * @property string $slug
+ * @property bool $is_visible
+ * @property array<string, mixed>|string|null $title
+ * @property array<string, mixed>|string|null $description
+ * @property string|null $icon
+ * @property string|null $url
+ * @property string|null $button_url
+ * @property int $sort_order
+ * @property int $lock_version
+ * @property array<string, mixed>|null $settings
+ */
 class SectionItem extends Model
 {
-    use HasFactory, HasLockVersion, HasUuids, SoftDeletes;
+    use BelongsToTenant, HasGalleries, HasLockVersion, HasUniqueSlug, HasUuid, SoftDeletes;
+
+    public const IMAGE_COLLECTION = 'image';
 
     protected $guarded = ['id'];
 
     public function getTable(): string
     {
-        return config('pages.tables.section_items', 'section_items');
-    }
-
-    public function getRouteKeyName(): string
-    {
-        return 'uuid';
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    public function uniqueIds(): array
-    {
-        return ['uuid'];
+        return PagesConfigResolver::sectionItemsTable();
     }
 
     protected static function booted(): void
     {
         static::creating(function (self $item): void {
-            $item->team_id ??= $item->section?->team_id ?? app(TeamResolver::class)->resolve();
             $item->is_visible ??= config('pages.defaults.item_visible', true);
         });
 
         static::saving(function (self $item): void {
-            $item->team_id ??= $item->section?->team_id ?? app(TeamResolver::class)->resolve();
             $item->is_visible ??= config('pages.defaults.item_visible', true);
-
-            if ($item->section && $item->team_id !== $item->section->team_id) {
-                $item->team_id = $item->section->team_id;
-            }
-
-            if (! $item->slug || $item->isDirty('title') || $item->isDirty('icon')) {
-                $item->slug = app(SlugGenerator::class)->generate($item, $item->slugSource());
-            }
         });
     }
 
@@ -76,35 +72,33 @@ class SectionItem extends Model
         ];
     }
 
+    /** @return BelongsTo<Section, $this> */
     public function section(): BelongsTo
     {
-        return $this->belongsTo(config('pages.models.section', Section::class));
+        return $this->belongsTo(PagesModels::section());
     }
 
+    /** @param Builder<SectionItem> $query */
     #[Scope]
     protected function visible(Builder $query): void
     {
         $query->where('is_visible', true);
     }
 
+    /** @param Builder<SectionItem> $query */
     #[Scope]
     protected function ordered(Builder $query): void
     {
         $query->orderBy('sort_order')->orderBy('created_at');
     }
 
+    /** @param Builder<SectionItem> $query */
     #[Scope]
     protected function forSection(Builder $query, Section|string $section): void
     {
         $section instanceof Section
             ? $query->where('section_id', $section->getKey())
             : $query->whereHas('section', fn (Builder $query) => $query->where('uuid', $section));
-    }
-
-    #[Scope]
-    protected function forTeam(Builder $query, ?int $teamId): void
-    {
-        $teamId === null ? $query->whereNull('team_id') : $query->where('team_id', $teamId);
     }
 
     public function isVisible(): bool
@@ -134,14 +128,19 @@ class SectionItem extends Model
         return data_get($this->settings, $key, $default);
     }
 
-    public function hasImage(): bool
-    {
-        return filled($this->image);
-    }
-
     public function buttonUrl(): ?string
     {
         return $this->button_url;
+    }
+
+    public function imageUrl(string $conversion = 'thumb'): ?string
+    {
+        return $this->galleryImageUrl(self::IMAGE_COLLECTION, $conversion);
+    }
+
+    public function hasImage(): bool
+    {
+        return $this->imageUrl() !== null;
     }
 
     public function localized(string $field, ?string $locale = null): string
@@ -158,12 +157,12 @@ class SectionItem extends Model
         return (string) ($value[$locale] ?? $value[$fallback] ?? reset($value) ?: '');
     }
 
-    private static function currentLocaleCode(): string
+    protected static function currentLocaleCode(): string
     {
         return corexis_locale_code() ?: config('app.locale', 'en');
     }
 
-    private function slugSource(): string
+    public function slugSource(): string
     {
         return $this->localized('title') ?: $this->icon ?: (string) $this->uuid;
     }

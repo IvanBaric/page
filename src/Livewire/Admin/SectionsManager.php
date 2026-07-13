@@ -3,8 +3,10 @@
 namespace IvanBaric\Pages\Livewire\Admin;
 
 use Flux\Flux;
+use Illuminate\Contracts\View\View;
 use IvanBaric\Pages\Actions\CreateSectionAction;
 use IvanBaric\Pages\Actions\DeleteSectionAction;
+use IvanBaric\Pages\Actions\ToggleSectionVisibilityAction;
 use IvanBaric\Pages\Actions\UpdateSectionAction;
 use IvanBaric\Pages\Models\Page;
 use Livewire\Attributes\Locked;
@@ -22,10 +24,13 @@ final class SectionsManager extends Component
 
     public string $type = 'hero';
 
+    /** @var array<string, string> */
     public array $title = ['en' => ''];
 
+    /** @var array<string, string> */
     public array $subtitle = ['en' => ''];
 
+    /** @var array<string, string> */
     public array $description = ['en' => ''];
 
     public bool $is_visible = true;
@@ -53,7 +58,7 @@ final class SectionsManager extends Component
         $this->description = is_array($section->description) ? $section->description : [$this->locale => (string) $section->description];
         $this->is_visible = $section->is_visible;
         $this->sort_order = $section->sort_order;
-        $this->lock_version = method_exists($section, 'getLockVersion') ? $section->getLockVersion() : (int) ($section->lock_version ?? 0);
+        $this->lock_version = $section->getLockVersion();
     }
 
     public function save(): void
@@ -63,9 +68,11 @@ final class SectionsManager extends Component
             ? app(UpdateSectionAction::class)->handle($this->editingUuid, $payload)
             : app(CreateSectionAction::class)->handle($this->page->uuid, $payload);
 
-        if (! $result->successful) {
-            foreach ($result->data?->messages() ?? [] as $field => $messages) {
-                $this->addError($field, $messages[0]);
+        if (! $result->success) {
+            foreach ($result->errors as $field => $messages) {
+                if (is_array($messages) && isset($messages[0]) && is_string($messages[0])) {
+                    $this->addError((string) $field, $messages[0]);
+                }
             }
 
             Flux::toast(variant: 'danger', text: $result->message);
@@ -77,17 +84,18 @@ final class SectionsManager extends Component
         Flux::toast(variant: 'success', text: $result->message);
     }
 
-    public function toggle(string $uuid): void
+    public function toggle(string $uuid, ToggleSectionVisibilityAction $action): void
     {
-        $section = $this->page->sections()->where('uuid', $uuid)->firstOrFail();
-        $section->isVisible() ? $section->hide() : $section->show();
+        $result = $action->handle($this->page->sections()->where('uuid', $uuid)->firstOrFail());
+
+        Flux::toast(variant: $result->success ? 'success' : 'danger', text: $result->message);
     }
 
     public function archive(string $uuid): void
     {
         $result = app(DeleteSectionAction::class)->handle($uuid);
 
-        Flux::toast(variant: $result->successful ? 'success' : 'danger', text: $result->message);
+        Flux::toast(variant: $result->success ? 'success' : 'danger', text: $result->message);
     }
 
     public function delete(string $uuid): void
@@ -95,12 +103,12 @@ final class SectionsManager extends Component
         $this->archive($uuid);
     }
 
-    public function render()
+    public function render(): View
     {
         return view('pages::livewire.admin.sections-manager', [
             'sections' => $this->page->sections()->ordered()->get(),
         ])->layout(config('pages.admin_ui.layout', 'layouts.app'), [
-            'title' => __('Sections'),
+            'title' => __('Sekcije'),
         ]);
     }
 

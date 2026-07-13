@@ -13,6 +13,7 @@
     $showContent = $showContent ?? true;
     $showValueSuffix = $showValueSuffix ?? true;
     $showIconHelp = $showIconHelp ?? false;
+    $iconOptions = $iconOptions ?? [];
     $showSortOrder = $showSortOrder ?? false;
     $showVisibility = $showVisibility ?? true;
     $customFields = $customFields ?? [];
@@ -20,7 +21,7 @@
     $modalFlyout = $modalFlyout ?? false;
     $singleColumnFields = $singleColumnFields ?? false;
     $contentRows = $contentRows ?? 7;
-    $imageUploadSize = $imageUploadSize ?? 'w-full aspect-[4/3]';
+    $imageUploadSize = $imageUploadSize ?? 'w-full aspect-video';
     $imageLabel = $imageLabel ?? __('Slika ili logo');
     $imageHelp = $imageHelp ?? corexis_image_upload()->helpText();
     $iconLabel = $iconLabel ?? __('Ikona');
@@ -62,17 +63,16 @@
                 <p class="admin-panel-description">{{ $description }}</p>
             </div>
             @if ($this->canCreateItem())
-                <flux:modal.trigger :name="$this->modalName()">
-                    <flux:button wire:click="createItem" variant="filled" icon="plus">{{ $this->addButtonLabel() }}</flux:button>
-                </flux:modal.trigger>
+                <flux:button type="button" wire:click="createItem" wire:loading.attr="disabled" wire:target="createItem" variant="filled" icon="plus">{{ $this->addButtonLabel() }}</flux:button>
             @endif
         </div>
 
         @if ($this->items->isEmpty())
-            <div class="px-6 py-14 text-center">
-                <h3 class="text-base font-semibold text-zinc-950 dark:text-white">{{ $this->emptyText() }}</h3>
-                <p class="mx-auto mt-2 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">{{ __('Dodajte prvu stavku za ovu sekciju.') }}</p>
-            </div>
+            <x-admin-ui::empty-state :title="$this->emptyText()" :description="__('Dodajte prvu stavku za ovu sekciju.')">
+                <x-slot:icon>
+                    <flux:icon name="rectangle-stack" class="size-5" />
+                </x-slot:icon>
+            </x-admin-ui::empty-state>
         @else
             <div wire:sort="reorderItem" class="divide-y divide-zinc-200 dark:divide-zinc-800">
                 @foreach ($this->items as $item)
@@ -83,11 +83,9 @@
                             </span>
                         </flux:tooltip>
                         <div class="min-w-0">
-                            <flux:modal.trigger :name="$this->modalName()">
-                                <button type="button" wire:click="editItem('{{ $item->uuid }}')" class="block max-w-full truncate text-left text-[15px] font-semibold text-zinc-950 transition hover:text-accent dark:text-white dark:hover:text-accent">
-                                    {{ $item->localized('title') ?: __('Neimenovana stavka') }}
-                                </button>
-                            </flux:modal.trigger>
+                            <button type="button" wire:click="editItem('{{ $item->uuid }}')" wire:loading.attr="disabled" wire:target="editItem('{{ $item->uuid }}')" class="block max-w-full truncate text-left text-[15px] font-semibold text-zinc-950 transition hover:text-accent disabled:cursor-wait dark:text-white dark:hover:text-accent">
+                                {{ $item->localized('title') ?: __('Neimenovana stavka') }}
+                            </button>
                             <p class="mt-1 line-clamp-2 text-[13px] leading-5 text-zinc-500 dark:text-zinc-400">{{ $item->localized('content') ?: $item->localized('description') ?: $item->url }}</p>
                         </div>
                         <flux:tooltip :content="$item->is_visible ? __('Sakrij stavku u ovoj sekciji') : __('Prikaži stavku u ovoj sekciji')">
@@ -97,13 +95,9 @@
                             <flux:dropdown position="bottom" align="end">
                                 <flux:button size="sm" variant="ghost" icon="ellipsis-horizontal" :aria-label="__('Akcije')" />
                                 <flux:menu>
-                                    <flux:modal.trigger :name="$this->modalName()">
-                                        <flux:menu.item as="button" type="button" wire:click="editItem('{{ $item->uuid }}')" icon="pencil">{{ $editActionLabel }}</flux:menu.item>
-                                    </flux:modal.trigger>
+                                    <flux:menu.item as="button" type="button" wire:click="editItem('{{ $item->uuid }}')" icon="pencil">{{ $editActionLabel }}</flux:menu.item>
                                     <flux:menu.separator />
-                                    <flux:modal.trigger :name="$this->deleteModalName()">
-                                        <flux:menu.item as="button" type="button" wire:click="confirmDeleteItem('{{ $item->uuid }}')" icon="archive-box" variant="danger">{{ $deleteActionLabel }}</flux:menu.item>
-                                    </flux:modal.trigger>
+                                    <flux:menu.item as="button" type="button" wire:click="confirmDeleteItem('{{ $item->uuid }}')" icon="archive-box" variant="danger">{{ $deleteActionLabel }}</flux:menu.item>
                                 </flux:menu>
                             </flux:dropdown>
                         </div>
@@ -112,7 +106,7 @@
             </div>
         @endif
 
-        <flux:modal :name="$this->modalName()" flyout variant="floating" :class="$modalClass">
+        <flux:modal :name="$this->modalName()" x-on:close="$wire.cancelItemForm()" flyout variant="floating" :class="$modalClass">
             @include('pages::livewire.admin.partials.configured-item-form', [
                 'inlineForm' => false,
                 'showFormHeader' => true,
@@ -121,7 +115,7 @@
             ])
         </flux:modal>
 
-        <flux:modal :name="$this->deleteModalName()" class="max-w-lg">
+        <flux:modal :name="$this->deleteModalName()" x-on:close="$wire.cancelDeleteItem()" class="max-w-lg">
             <div class="space-y-6">
                 <div>
                     <flux:heading size="lg">{{ $deleteConfirmTitle }}</flux:heading>

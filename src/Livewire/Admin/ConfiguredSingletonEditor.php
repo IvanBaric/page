@@ -7,14 +7,17 @@ namespace IvanBaric\Pages\Livewire\Admin;
 use Flux\Flux;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
+use IvanBaric\AdminUi\Support\HeroiconRegistry;
+use IvanBaric\Gallery\Models\Gallery;
+use IvanBaric\Gallery\Support\OptimizedMediaUpload;
 use IvanBaric\Pages\Admin\AdminSection;
 use IvanBaric\Pages\Admin\AdminSectionRegistry;
 use IvanBaric\Pages\Admin\Field;
 use IvanBaric\Pages\Admin\LayoutVariant;
 use IvanBaric\Pages\Admin\Tab;
-use IvanBaric\Pages\Support\TeamResolver;
+use IvanBaric\Pages\Support\PagesModels;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
@@ -70,22 +73,26 @@ final class ConfiguredSingletonEditor extends Component
 
     public function save(): void
     {
+        $this->authorizeWrite();
         $this->saveFormData();
     }
 
     public function saveLayout(): void
     {
+        $this->authorizeWrite();
         $this->saveLayoutData();
     }
 
     public function saveSettings(): void
     {
+        $this->authorizeWrite();
         $this->saveSettingsData();
     }
 
     #[On('pages-save-singleton-editor')]
     public function saveAllChanges(): void
     {
+        $this->authorizeWrite();
         $layoutVariant = $this->layoutVariant;
         $settingsForm = $this->settingsForm;
 
@@ -104,9 +111,14 @@ final class ConfiguredSingletonEditor extends Component
                 $this->saveSettingsData(showToast: false);
             }
         } catch (ValidationException $exception) {
-            $this->toast(false, __('Dogodila se pogreška prilikom spremanja podataka. Provjerite podatke i pokušajte ponovno.'));
+            $this->toast(false, corexis_validation_toast_message(
+                $exception,
+                __('Dogodila se pogreška prilikom spremanja podataka. Provjerite podatke i pokušajte ponovno.'),
+            ));
 
             throw $exception;
+        } finally {
+            $this->dispatch('pages-save-finished');
         }
 
         $this->toast(true, __('Promjene su spremljene.'));
@@ -114,9 +126,31 @@ final class ConfiguredSingletonEditor extends Component
 
     public function removeImage(string $key): void
     {
+        $this->resetValidation('uploads.'.$key);
+
         $this->uploads[$key] = null;
         $this->form[$key] = null;
         $this->removeImages[$key] = true;
+
+        $field = $this->formTab()?->field($key);
+
+        if (! $field instanceof Field || $field->type() !== 'image') {
+            return;
+        }
+
+        if (! (bool) $field->optionValue('store_as_gallery_media', false)) {
+            return;
+        }
+
+        $deleted = $this->deleteModelGalleryImage($field);
+
+        if ((bool) $field->optionValue('store_value', false)) {
+            $data = $this->storedData();
+            data_set($data, $this->fieldStoragePath($field), null);
+            $this->saveStoredData($data);
+        }
+
+        $this->toast(true, $deleted ? __('Slika je trajno obrisana.') : __('Slika je uklonjena.'));
     }
 
     public function imageUrl(string $key): ?string
@@ -145,20 +179,18 @@ final class ConfiguredSingletonEditor extends Component
             return null;
         }
 
-        if (str_starts_with($image, 'http://') || str_starts_with($image, 'https://')) {
-            return $image;
-        }
-
-        return Storage::disk('public')->url($image);
+        return corexis_public_media_url($image);
     }
 
-    /** @return array<int, array{key: string, label: string, type: string, icon: string}> */
+    /** @return array<int, array{key: string, label: string, heading: string, description: string, type: string, icon: string}> */
     public function editorTabs(): array
     {
         return array_map(
             fn (Tab $tab): array => [
                 'key' => $tab->key(),
                 'label' => $tab->labelValue(),
+                'heading' => (string) ($tab->optionValue('heading', $tab->labelValue()) ?? $tab->labelValue()),
+                'description' => (string) ($tab->optionValue('description', '') ?? ''),
                 'type' => $tab->type(),
                 'icon' => $this->iconForTab($tab),
             ],
@@ -271,7 +303,7 @@ final class ConfiguredSingletonEditor extends Component
         );
     }
 
-    /** @return array<int, array{value: string, label: string, description: string, options: array<string, mixed>}> */
+    /** @return array<int, array<string, mixed>> */
     public function layoutVariants(): array
     {
         return array_map(
@@ -291,7 +323,10 @@ final class ConfiguredSingletonEditor extends Component
             $validated = $this->validatedForm();
         } catch (ValidationException $exception) {
             if ($showToast) {
-                $this->toast(false, __('Provjerite obavezna polja i pokušajte ponovno.'));
+                $this->toast(false, corexis_validation_toast_message(
+                    $exception,
+                    __('Provjerite obavezna polja i pokušajte ponovno.'),
+                ));
             }
 
             throw $exception;
@@ -394,13 +429,17 @@ final class ConfiguredSingletonEditor extends Component
     private function validatedForm(): array
     {
         $rules = [];
+        $messages = array_filter([
+            'required' => $this->definition()?->message('required'),
+        ]);
         $attributes = [];
 
         foreach ($this->formTab()?->fieldsValue() ?? [] as $field) {
             if ($field->type() === 'image') {
                 $rules['uploads.'.$field->key()] = $field->rulesValue();
+                $messages = array_replace($messages, corexis_image_upload()->messages('uploads.'.$field->key()));
             } else {
-                $rules['form.'.$field->key()] = $field->rulesValue();
+                $rules['form.'.$field->key()] = $this->rulesForField($field);
             }
 
             if ($field->labelValue() !== '') {
@@ -408,9 +447,7 @@ final class ConfiguredSingletonEditor extends Component
             }
         }
 
-        return $this->validate($rules, array_filter([
-            'required' => $this->definition()?->message('required'),
-        ]), $attributes);
+        return $this->validate($rules, $messages, $attributes);
     }
 
     /** @return array<string, mixed> */
@@ -420,7 +457,7 @@ final class ConfiguredSingletonEditor extends Component
         $attributes = [];
 
         foreach ($this->settingsTab()?->fieldsValue() ?? [] as $field) {
-            $rules['settingsForm.'.$field->key()] = $field->rulesValue();
+            $rules['settingsForm.'.$field->key()] = $this->rulesForField($field);
 
             if ($field->labelValue() !== '') {
                 $attributes['settingsForm.'.$field->key()] = $field->labelValue();
@@ -434,7 +471,10 @@ final class ConfiguredSingletonEditor extends Component
         return (array) data_get($validated, 'settingsForm', []);
     }
 
-    /** @param array<string, mixed> $data */
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function initialSettingsForm(array $data): array
     {
         $form = [];
@@ -452,7 +492,9 @@ final class ConfiguredSingletonEditor extends Component
         $upload = $this->uploads[$key] ?? null;
 
         if ($upload) {
-            return $upload->store((string) ($field->optionValue('directory', 'uploads') ?? 'uploads'), 'public');
+            throw ValidationException::withMessages([
+                'uploads.'.$key => __('Ovo polje slike nije povezano s Media Library kolekcijom.'),
+            ]);
         }
 
         if ((bool) ($this->removeImages[$key] ?? false)) {
@@ -479,10 +521,7 @@ final class ConfiguredSingletonEditor extends Component
         $gallery = $model->gallery($collection);
 
         if ($removeImage && ! $upload instanceof TemporaryUploadedFile) {
-            if ($gallery && method_exists($gallery, 'clearMediaCollection')) {
-                $gallery->clearMediaCollection($collection);
-                $gallery->delete();
-            }
+            $this->deleteModelGalleryImage($field);
 
             return;
         }
@@ -495,11 +534,8 @@ final class ConfiguredSingletonEditor extends Component
         $gallery = $model->getOrCreateGallery($collection, ['title' => $title]);
         $gallery->clearMediaCollection($collection);
 
-        $media = $gallery
-            ->addMedia($upload->getRealPath())
-            ->usingFileName($upload->hashName())
-            ->usingName(pathinfo($upload->getClientOriginalName(), PATHINFO_FILENAME) ?: $upload->hashName())
-            ->withCustomProperties([
+        $media = app(OptimizedMediaUpload::class)
+            ->addUploadToGallery($gallery, $upload, $collection, pathinfo($upload->getClientOriginalName(), PATHINFO_FILENAME) ?: $upload->hashName(), [
                 'alt' => $title,
                 'title' => $title,
                 'caption' => '',
@@ -508,13 +544,34 @@ final class ConfiguredSingletonEditor extends Component
                 'source_url' => '',
                 'license' => '',
                 'is_decorative' => false,
-            ])
-            ->toMediaCollection($collection);
+            ]);
 
         $gallery->forceFill([
             'title' => $title,
             'featured_media_id' => $media->id,
         ])->save();
+    }
+
+    private function deleteModelGalleryImage(Field $field): bool
+    {
+        $model = $this->model();
+
+        if (! method_exists($model, 'gallery')) {
+            return false;
+        }
+
+        $collection = (string) ($field->optionValue('media_collection', 'image') ?: 'image');
+        $gallery = $model->gallery($collection);
+
+        if (! $gallery instanceof Gallery) {
+            return false;
+        }
+
+        $gallery->forceFill(['featured_media_id' => null])->save();
+        $gallery->clearMediaCollection($collection);
+        $gallery->delete();
+
+        return true;
     }
 
     private function modelGalleryImageTitle(Field $field, Model $model): string
@@ -667,6 +724,10 @@ final class ConfiguredSingletonEditor extends Component
 
     private function normalizeFieldValue(Field $field, mixed $value): mixed
     {
+        if ($field->type() === 'icon' && $this->iconPickerEnabled($field)) {
+            return filled($value) ? HeroiconRegistry::safe((string) $value) : null;
+        }
+
         if ($field->type() === 'boolean') {
             return (bool) $value;
         }
@@ -702,7 +763,29 @@ final class ConfiguredSingletonEditor extends Component
             'size' => $this->imageUploadSize($field->optionValue('size')),
             'fit' => $field->optionValue('fit'),
             'options' => $this->fieldOptions($field),
+            'picker' => $this->iconPickerEnabled($field),
         ];
+    }
+
+    /** @return array<int, mixed> */
+    private function rulesForField(Field $field): array
+    {
+        $rules = $field->rulesValue();
+
+        if ($field->type() === 'icon' && $this->iconPickerEnabled($field)) {
+            $rules = array_values(array_filter(
+                $rules,
+                static fn (string $rule): bool => ! str_starts_with($rule, 'max:'),
+            ));
+            $rules[] = 'in:'.implode(',', HeroiconRegistry::names());
+        }
+
+        return $rules;
+    }
+
+    private function iconPickerEnabled(Field $field): bool
+    {
+        return $field->type() === 'icon' && (bool) $field->optionValue('picker', true);
     }
 
     /** @return array<int, array{value: mixed, label: string}> */
@@ -712,7 +795,7 @@ final class ConfiguredSingletonEditor extends Component
             return $this->publishedPageOptions();
         }
 
-        return array_values(array_map(
+        return array_map(
             static function (mixed $key, mixed $option): array {
                 if (is_array($option)) {
                     return [
@@ -728,44 +811,35 @@ final class ConfiguredSingletonEditor extends Component
             },
             array_keys((array) $field->optionValue('options', [])),
             (array) $field->optionValue('options', []),
-        ));
+        );
     }
 
     /** @return array<int, array{value: string, label: string}> */
     private function publishedPageOptions(): array
     {
-        $model = $this->model();
-        $pageModel = config('pages.models.page', \IvanBaric\Pages\Models\Page::class);
-
-        /** @var class-string<Model> $pageModel */
+        $pageModel = PagesModels::page();
         $pages = $pageModel::query()
-            ->forTeam(is_numeric($model->getAttribute('team_id')) ? (int) $model->getAttribute('team_id') : null)
             ->published()
             ->ordered()
             ->get();
 
-        return collect([['value' => '', 'label' => __('Odaberite stranicu')]])
-            ->merge($pages->map(function (Model $page): array {
-                return [
-                    'value' => (string) $page->getAttribute('uuid'),
-                    'label' => method_exists($page, 'localized')
-                        ? (string) $page->localized('title')
-                        : (string) data_get($page, 'title', $page->getAttribute('slug')),
-                ];
-            }))
-            ->values()
-            ->all();
+        $options = [['value' => '', 'label' => __('Odaberite stranicu')]];
+
+        foreach ($pages as $page) {
+            $options[] = [
+                'value' => (string) $page->getAttribute('uuid'),
+                'label' => $page->localized('title'),
+            ];
+        }
+
+        return $options;
     }
 
     private function publishedPageUuidFor(string $pageKey): ?string
     {
-        $model = $this->model();
-        $pageModel = config('pages.models.page', \IvanBaric\Pages\Models\Page::class);
-
-        /** @var class-string<Model> $pageModel */
-        $hasPageKey = \Illuminate\Support\Facades\Schema::hasColumn((new $pageModel)->getTable(), 'page_key');
+        $pageModel = PagesModels::page();
+        $hasPageKey = Schema::hasColumn((new $pageModel)->getTable(), 'page_key');
         $page = $pageModel::query()
-            ->forTeam(is_numeric($model->getAttribute('team_id')) ? (int) $model->getAttribute('team_id') : null)
             ->published()
             ->where(function ($query) use ($hasPageKey, $pageKey): void {
                 if ($hasPageKey) {
@@ -785,9 +859,9 @@ final class ConfiguredSingletonEditor extends Component
     {
         return match ($size) {
             'small' => 'size-32',
-            'medium', null => 'w-full aspect-[4/3]',
+            'medium', null => 'w-full aspect-video',
             'large' => 'w-full aspect-video',
-            default => is_string($size) ? $size : 'w-full aspect-[4/3]',
+            default => is_string($size) ? $size : 'w-full aspect-video',
         };
     }
 
@@ -805,7 +879,7 @@ final class ConfiguredSingletonEditor extends Component
     {
         $tabs = $this->definition()?->tabsValue() ?? [];
 
-        return $tabs[0]?->key() ?? 'content';
+        return $tabs === [] ? 'content' : $tabs[0]->key();
     }
 
     private function validTabKey(?string $tab): string
@@ -821,13 +895,20 @@ final class ConfiguredSingletonEditor extends Component
 
     private function authorizeModel(Model $model): void
     {
-        $teamId = app(TeamResolver::class)->resolve();
+        $teamId = corexis_tenant_id();
 
         if ($teamId === null) {
             return;
         }
 
         abort_unless((int) $model->getAttribute('team_id') === (int) $teamId, 404);
+    }
+
+    private function authorizeWrite(): void
+    {
+        $model = $this->model();
+        $this->authorizeModel($model);
+        corexis_authorize('pages.update', $model);
     }
 
     private function toast(bool $success, string $message): void

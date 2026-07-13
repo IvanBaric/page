@@ -1,63 +1,67 @@
-<x-admin-ui::page>
-    <div class="admin-page-header">
-        <div class="admin-page-header-copy">
-            <h1 class="admin-page-title">
-                @if ($part === 'header')
-                    {{ __('Zaglavlje') }}
-                @elseif ($part === 'footer')
-                    {{ __('Podnožje') }}
-                @else
-                    {{ __('Stranice') }}
-                @endif
-            </h1>
-            <flux:text class="admin-page-description">
-                @if ($part === 'header')
-                    {{ __('Pregled javnog zaglavlja. Linkovi dolaze iz objavljenih stranica i njihovog redoslijeda.') }}
-                @elseif ($part === 'footer')
-                    {{ __('Uredite tekst javnog podnožja. Linkovi dolaze iz objavljenih stranica i njihovog redoslijeda.') }}
-                @else
-                    {{ __('Složite stranice, uredite njihov redoslijed i dodajte nove stranice za vlastiti sadržaj.') }}
-                @endif
-            </flux:text>
-        </div>
+@php($editorHeader = $this->isTemplatePart() ? $this->editorHeader($part) : null)
+
+<x-admin-ui::page
+    x-data="{
+        saving: false,
+        editorTitle: $el.dataset.editorTitle,
+        editorDescription: $el.dataset.editorDescription,
+    }"
+    :data-editor-title="$editorHeader['title'] ?? ''"
+    :data-editor-description="$editorHeader['description'] ?? ''"
+    x-on:pages-save-finished.window="saving = false"
+    x-on:pages-editor-tab-changed.window="editorDescription = $event.detail.description"
+>
+    <x-admin-ui::page-header
+        :title="$part === 'pages' ? __('Stranice') : null"
+        :description="$part === 'pages' ? __('Složite stranice, uredite njihov redoslijed i dodajte nove stranice za vlastiti sadržaj.') : null"
+        icon="document-text"
+    >
+        @if ($this->isTemplatePart())
+            <x-slot:headingContent><span x-text="editorTitle"></span></x-slot:headingContent>
+            <x-slot:descriptionContent><span x-text="editorDescription"></span></x-slot:descriptionContent>
+        @endif
+
         @if ($part === 'pages')
-            <div class="admin-page-actions">
-                <flux:modal.trigger name="page-create-form">
-                    <flux:button variant="primary" icon="plus">{{ __('Nova stranica') }}</flux:button>
-                </flux:modal.trigger>
-            </div>
-        @elseif ($part === 'header' || $part === 'footer')
-            <div class="admin-page-actions">
+            <x-slot:actions>
+                <flux:button type="button" wire:click="openCreatePage" wire:loading.attr="disabled" wire:target="openCreatePage" variant="primary" icon="plus">{{ __('Nova stranica') }}</flux:button>
+            </x-slot:actions>
+        @elseif ($this->isTemplatePart())
+            <x-slot:actions>
                 <flux:button
                     type="button"
                     variant="primary"
                     icon="check"
+                    x-on:click="saving = true"
+                    x-bind:disabled="saving"
                     wire:click="$dispatch('pages-save-singleton-editor')"
                 >
-                    {{ __('Spremi promjene') }}
+                    <span x-show="! saving">{{ __('Spremi promjene') }}</span>
+                    <span x-cloak x-show="saving" class="inline-flex items-center gap-2">
+                        <span class="admin-submit-spinner" aria-hidden="true"></span>
+                        <span>{{ __('Spremanje...') }}</span>
+                    </span>
                 </flux:button>
-            </div>
+            </x-slot:actions>
         @endif
-    </div>
+    </x-admin-ui::page-header>
 
-    @if ($part === 'header')
-        @if ($this->organization && $this->canRenderTemplatePart('header'))
-            @livewire(\IvanBaric\Pages\Livewire\Admin\ConfiguredSingletonEditor::class, ['model' => $this->organization, 'definitionKey' => $this->templatePartDefinitionKey('header')], key('admin-header-editor-'.$this->organization->getKey()))
+    @if ($this->isTemplatePart())
+        @if ($this->organization && $this->canRenderTemplatePart($part))
+            <div class="relative">
+                <div x-cloak x-show="saving" x-transition.opacity.duration.150ms class="pointer-events-none absolute inset-0 z-30 flex items-start justify-center bg-white/35 pt-4 backdrop-blur-[1px] dark:bg-zinc-950/25">
+                    <div class="admin-loading-pill">
+                        <span class="admin-loading-spinner" aria-hidden="true"></span>
+                        <span>{{ __('Spremanje...') }}</span>
+                    </div>
+                </div>
+
+                <div x-bind:class="{ 'admin-panel-content-loading': saving }">
+                    @livewire(\IvanBaric\Pages\Livewire\Admin\ConfiguredSingletonEditor::class, ['model' => $this->organization, 'definitionKey' => $this->templatePartDefinitionKey($part)], key('admin-'.$part.'-editor-'.$this->organization->getKey()))
+                </div>
+            </div>
         @elseif ($this->organization)
             <x-admin-ui::panel class="p-6">
-                <p class="text-sm text-zinc-500 dark:text-zinc-400">{{ $this->unsupportedTemplatePartText('header') }}</p>
-            </x-admin-ui::panel>
-        @else
-            <x-admin-ui::panel class="p-6">
-                <p class="text-sm text-zinc-500 dark:text-zinc-400">{{ $this->missingSingletonSubjectText() }}</p>
-            </x-admin-ui::panel>
-        @endif
-    @elseif ($part === 'footer')
-        @if ($this->organization && $this->canRenderTemplatePart('footer'))
-            @livewire(\IvanBaric\Pages\Livewire\Admin\ConfiguredSingletonEditor::class, ['model' => $this->organization, 'definitionKey' => $this->templatePartDefinitionKey('footer')], key('admin-footer-editor-'.$this->organization->getKey()))
-        @elseif ($this->organization)
-            <x-admin-ui::panel class="p-6">
-                <p class="text-sm text-zinc-500 dark:text-zinc-400">{{ $this->unsupportedTemplatePartText('footer') }}</p>
+                <p class="text-sm text-zinc-500 dark:text-zinc-400">{{ $this->unsupportedTemplatePartText($part) }}</p>
             </x-admin-ui::panel>
         @else
             <x-admin-ui::panel class="p-6">
@@ -105,6 +109,16 @@
                 </div>
             </div>
 
+            @if ($this->pages->isNotEmpty())
+                <div class="admin-list-header hidden grid-cols-[3rem_minmax(0,1fr)_8rem_8rem_13rem] lg:grid">
+                    <span></span>
+                    <span>{{ __('Stranica') }}</span>
+                    <span>{{ __('Sekcije') }}</span>
+                    <span>{{ __('Status') }}</span>
+                    <span class="text-right">{{ __('Akcije') }}</span>
+                </div>
+            @endif
+
             <div id="table" @if ($this->canReorder()) wire:sort="reorderPage" @endif class="divide-y divide-zinc-200 dark:divide-zinc-800">
                 @forelse ($this->pages as $page)
                     <article wire:key="page-{{ $page->uuid }}" @if ($this->canReorder()) wire:sort:item="{{ $page->uuid }}" @endif class="grid grid-cols-1 gap-4 px-5 py-4 transition hover:bg-zinc-50/80 dark:hover:bg-white/[0.03] lg:grid-cols-[3rem_minmax(0,1fr)_8rem_8rem_13rem] lg:items-center">
@@ -136,69 +150,69 @@
                                 <flux:button size="sm" variant="ghost" icon="ellipsis-horizontal" :aria-label="__('Akcije')" />
 
                                 <flux:menu>
-                                    <flux:modal.trigger name="page-title-form">
-                                        <flux:menu.item as="button" type="button" wire:click="editPage('{{ $page->uuid }}')" icon="pencil-square">
-                                            {{ __('Promijeni naziv') }}
-                                        </flux:menu.item>
-                                    </flux:modal.trigger>
+                                    <flux:menu.item as="button" type="button" wire:click="editPage('{{ $page->uuid }}')" icon="pencil-square">
+                                        {{ __('Promijeni naziv') }}
+                                    </flux:menu.item>
                                     <flux:menu.item :href="$this->publicPageUrl($page)" target="_blank" icon="eye">
                                         {{ __('Javni prikaz') }}
                                     </flux:menu.item>
                                     @if ($this->canDeletePage($page))
-                                        <flux:modal.trigger name="page-delete">
-                                            <flux:menu.item as="button" type="button" wire:click="confirmDeletePage('{{ $page->uuid }}')" icon="archive-box" variant="danger">
-                                                {{ __('Arhiviraj') }}
-                                            </flux:menu.item>
-                                        </flux:modal.trigger>
+                                        <flux:menu.item as="button" type="button" wire:click="confirmDeletePage('{{ $page->uuid }}')" icon="archive-box" variant="danger">
+                                            {{ __('Arhiviraj') }}
+                                        </flux:menu.item>
                                     @endif
                                 </flux:menu>
                             </flux:dropdown>
                         </div>
                     </article>
                 @empty
-                    <div class="px-6 py-14 text-center">
-                        <h3 class="text-base font-semibold text-zinc-950 dark:text-white">{{ __('Nema stranica') }}</h3>
-                        <p class="mx-auto mt-2 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">{{ __('Pokrenite inicijalni seeder ili promijenite pretragu.') }}</p>
-                    </div>
+                    <x-admin-ui::empty-state
+                        :title="__('Nema stranica')"
+                        :description="__('Dodajte prvu stranicu ili promijenite pretragu i filtre.')"
+                    >
+                        <x-slot:icon>
+                            <flux:icon name="document-text" class="size-5" />
+                        </x-slot:icon>
+                    </x-admin-ui::empty-state>
                 @endforelse
             </div>
 
-            <div class="border-t border-zinc-200 px-5 py-4 dark:border-zinc-800">
-                <flux:pagination :paginator="$this->pages" scroll-to="#table" />
-            </div>
+            @if ($this->pages->hasPages())
+                <div class="border-t border-zinc-200 px-5 py-4 dark:border-zinc-800">
+                    <flux:pagination :paginator="$this->pages" scroll-to="#table" />
+                </div>
+            @endif
         </x-admin-ui::panel>
 
-        <flux:modal name="page-create-form" class="max-w-xl">
-            <form wire:submit="createPage" class="space-y-6">
+        <flux:modal name="page-create-form" x-on:close="$wire.cancelCreatePage()" class="max-w-xl">
+            <form wire:submit="createPage" wire:loading.class="admin-panel-content-loading" wire:target="createPage" class="relative space-y-6">
+                <x-admin-ui::loading-overlay target="createPage" :text="__('Spremanje...')" />
                 <div>
                     <flux:heading size="lg">{{ __('Nova stranica') }}</flux:heading>
-                    <flux:text class="mt-2">{{ __('Upišite samo naziv. Adresa stranice i osnovne postavke izradit će se automatski.') }}</flux:text>
+                    <flux:text class="mt-2">{{ __('Upišite naziv stranice.') }}</flux:text>
                 </div>
 
-                <flux:input wire:model="newPageTitle" :label="__('Naziv stranice')" :placeholder="__('Npr. Projekti, Radionice ili Donacije')" autofocus />
-
-                <div class="rounded-lg bg-zinc-50 p-4 text-sm leading-6 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
-                    {{ __('Nakon izrade otvorit će se uređivanje nove stranice. Zatim možete kopirati sekcije koje vam se sviđaju s drugih stranica.') }}
-                </div>
+                <flux:input wire:model="newPageTitle" :label="__('Naziv stranice')" :placeholder="__('Npr. Projekti, Radionice ili Donacije')" data-required autofocus />
 
                 <div class="flex justify-end gap-2">
                     <flux:modal.close>
                         <flux:button type="button" variant="ghost">{{ __('Odustani') }}</flux:button>
                     </flux:modal.close>
-                    <flux:button type="submit" variant="primary" icon="plus">{{ __('Izradi stranicu') }}</flux:button>
+                    <x-admin-ui::submit-button target="createPage" icon="plus">{{ __('Izradi stranicu') }}</x-admin-ui::submit-button>
                 </div>
             </form>
         </flux:modal>
 
-        <flux:modal name="page-title-form" class="max-w-xl">
-            <form wire:submit="savePage" class="space-y-6">
+        <flux:modal name="page-title-form" x-on:close="$wire.cancelPageTitleForm()" class="max-w-xl">
+            <form wire:submit="savePage" wire:loading.class="admin-panel-content-loading" wire:target="savePage" class="relative space-y-6">
+                <x-admin-ui::loading-overlay target="savePage" :text="__('Spremanje...')" />
                 <div>
                     <flux:heading size="lg">{{ __('Naziv stranice') }}</flux:heading>
                     <flux:text class="mt-2">{{ __('Promijenite naziv i kratki opis koji se prikazuju u administraciji, navigaciji i javnom prikazu.') }}</flux:text>
                 </div>
 
                 <div class="grid gap-5">
-                    <flux:input wire:model="pageTitle" :label="__('Naziv stranice')" autofocus />
+                    <flux:input wire:model="pageTitle" :label="__('Naziv stranice')" data-required autofocus />
                     <flux:textarea wire:model="pageExcerpt" :label="__('Kratki opis')" rows="3" />
                 </div>
 
@@ -206,12 +220,12 @@
                     <flux:modal.close>
                         <flux:button type="button" variant="ghost">{{ __('Odustani') }}</flux:button>
                     </flux:modal.close>
-                    <flux:button type="submit" variant="primary" icon="check">{{ __('Spremi naziv') }}</flux:button>
+                    <x-admin-ui::submit-button target="savePage">{{ __('Spremi naziv') }}</x-admin-ui::submit-button>
                 </div>
             </form>
         </flux:modal>
 
-        <flux:modal name="page-delete" class="max-w-lg">
+        <flux:modal name="page-delete" x-on:close="$wire.cancelDeletePage()" class="max-w-lg">
             <div class="space-y-6">
                 <div>
                     <flux:heading size="lg">{{ __('Arhivirati stranicu?') }}</flux:heading>

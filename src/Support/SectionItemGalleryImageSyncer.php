@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace IvanBaric\Pages\Support;
 
+use IvanBaric\Gallery\Support\OptimizedMediaUpload;
 use IvanBaric\Pages\Models\SectionItem;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
@@ -11,14 +12,10 @@ final class SectionItemGalleryImageSyncer
 {
     public function sync(SectionItem $item, mixed $upload, bool $removeImage, string $collection = 'image', ?string $title = null): void
     {
-        if (! method_exists($item, 'gallery')) {
-            return;
-        }
-
         $gallery = $item->gallery($collection);
 
         if ($removeImage && ! $upload instanceof TemporaryUploadedFile) {
-            if ($gallery && method_exists($gallery, 'clearMediaCollection')) {
+            if ($gallery) {
                 $gallery->clearMediaCollection($collection);
                 $gallery->delete();
             }
@@ -26,7 +23,7 @@ final class SectionItemGalleryImageSyncer
             return;
         }
 
-        if (! $upload instanceof TemporaryUploadedFile || ! method_exists($item, 'getOrCreateGallery')) {
+        if (! $upload instanceof TemporaryUploadedFile) {
             return;
         }
 
@@ -34,11 +31,8 @@ final class SectionItemGalleryImageSyncer
         $gallery = $item->getOrCreateGallery($collection, ['title' => $title]);
         $gallery->clearMediaCollection($collection);
 
-        $media = $gallery
-            ->addMedia($upload->getRealPath())
-            ->usingFileName($upload->hashName())
-            ->usingName(pathinfo($upload->getClientOriginalName(), PATHINFO_FILENAME) ?: $upload->hashName())
-            ->withCustomProperties([
+        $media = app(OptimizedMediaUpload::class)
+            ->addUploadToGallery($gallery, $upload, $collection, pathinfo($upload->getClientOriginalName(), PATHINFO_FILENAME) ?: $upload->hashName(), [
                 'alt' => $title,
                 'title' => $title,
                 'caption' => '',
@@ -47,8 +41,7 @@ final class SectionItemGalleryImageSyncer
                 'source_url' => '',
                 'license' => '',
                 'is_decorative' => false,
-            ])
-            ->toMediaCollection($collection);
+            ]);
 
         $gallery->forceFill([
             'title' => $title,
@@ -62,7 +55,7 @@ final class SectionItemGalleryImageSyncer
             return (string) $title;
         }
 
-        $localizedTitle = method_exists($item, 'localized') ? $item->localized('title') : null;
+        $localizedTitle = $item->localized('title');
 
         return filled($localizedTitle) ? (string) $localizedTitle : __('Slika stavke');
     }

@@ -4,59 +4,52 @@ namespace IvanBaric\Pages\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use IvanBaric\Corexis\Concerns\BelongsToTenant;
 use IvanBaric\Corexis\Concerns\HasLockVersion;
+use IvanBaric\Corexis\Concerns\HasUniqueSlug;
+use IvanBaric\Corexis\Concerns\HasUuid;
 use IvanBaric\Gallery\Concerns\HasGalleries;
-use IvanBaric\Pages\Support\SlugGenerator;
-use IvanBaric\Pages\Support\TeamResolver;
+use IvanBaric\Pages\Support\PagesConfigResolver;
+use IvanBaric\Pages\Support\PagesModels;
 
+/**
+ * @property int $id
+ * @property int $page_id
+ * @property int|null $team_id
+ * @property string $uuid
+ * @property string $slug
+ * @property string $type
+ * @property bool $is_visible
+ * @property array<string, mixed>|string|null $title
+ * @property array<string, mixed>|string|null $subtitle
+ * @property array<string, mixed>|string|null $description
+ * @property int $sort_order
+ * @property int $lock_version
+ * @property array<string, mixed>|null $settings
+ */
 class Section extends Model
 {
-    use HasFactory, HasGalleries, HasLockVersion, HasUuids, SoftDeletes;
+    use BelongsToTenant, HasGalleries, HasLockVersion, HasUniqueSlug, HasUuid, SoftDeletes;
 
     protected $guarded = ['id'];
 
     public function getTable(): string
     {
-        return config('pages.tables.sections', 'sections');
-    }
-
-    public function getRouteKeyName(): string
-    {
-        return 'uuid';
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    public function uniqueIds(): array
-    {
-        return ['uuid'];
+        return PagesConfigResolver::sectionsTable();
     }
 
     protected static function booted(): void
     {
         static::creating(function (self $section): void {
-            $section->team_id ??= $section->page?->team_id ?? app(TeamResolver::class)->resolve();
             $section->is_visible ??= config('pages.defaults.section_visible', true);
         });
 
         static::saving(function (self $section): void {
-            $section->team_id ??= $section->page?->team_id ?? app(TeamResolver::class)->resolve();
             $section->is_visible ??= config('pages.defaults.section_visible', true);
-
-            if ($section->page && $section->team_id !== $section->page->team_id) {
-                $section->team_id = $section->page->team_id;
-            }
-
-            if (! $section->slug || $section->isDirty('title') || $section->isDirty('type')) {
-                $section->slug = app(SlugGenerator::class)->generate($section, $section->slugSource());
-            }
         });
     }
 
@@ -78,55 +71,57 @@ class Section extends Model
         ];
     }
 
+    /** @return BelongsTo<Page, $this> */
     public function page(): BelongsTo
     {
-        return $this->belongsTo(config('pages.models.page', Page::class));
+        return $this->belongsTo(PagesModels::page());
     }
 
+    /** @return HasMany<SectionItem, $this> */
     public function items(): HasMany
     {
-        return $this->hasMany(config('pages.models.section_item', SectionItem::class));
+        return $this->hasMany(PagesModels::sectionItem());
     }
 
+    /** @return HasMany<SectionItem, $this> */
     public function visibleItems(): HasMany
     {
         return $this->items()->visible()->ordered();
     }
 
+    /** @return HasMany<SectionItem, $this> */
     public function orderedItems(): HasMany
     {
         return $this->items()->ordered();
     }
 
+    /** @param Builder<Section> $query */
     #[Scope]
     protected function visible(Builder $query): void
     {
         $query->where('is_visible', true);
     }
 
+    /** @param Builder<Section> $query */
     public function scopeType(Builder $query, string $type): void
     {
         $query->where('type', $type);
     }
 
+    /** @param Builder<Section> $query */
     #[Scope]
     protected function ordered(Builder $query): void
     {
         $query->orderBy('sort_order')->orderBy('created_at');
     }
 
+    /** @param Builder<Section> $query */
     #[Scope]
     protected function forPage(Builder $query, Page|string $page): void
     {
         $page instanceof Page
             ? $query->where('page_id', $page->getKey())
             : $query->whereHas('page', fn (Builder $query) => $query->where('uuid', $page));
-    }
-
-    #[Scope]
-    protected function forTeam(Builder $query, ?int $teamId): void
-    {
-        $teamId === null ? $query->whereNull('team_id') : $query->where('team_id', $teamId);
     }
 
     public function isVisible(): bool
@@ -162,7 +157,6 @@ class Section extends Model
     public function addItem(array $data = []): SectionItem
     {
         return $this->items()->create(array_merge([
-            'team_id' => $this->team_id,
             'sort_order' => $this->items()->max('sort_order') + 1,
         ], $data));
     }
@@ -199,12 +193,12 @@ class Section extends Model
         return (string) ($value[$locale] ?? $value[$fallback] ?? reset($value) ?: '');
     }
 
-    private static function currentLocaleCode(): string
+    protected static function currentLocaleCode(): string
     {
         return corexis_locale_code() ?: config('app.locale', 'en');
     }
 
-    private function slugSource(): string
+    public function slugSource(): string
     {
         return $this->localized('title') ?: $this->type ?: (string) $this->uuid;
     }

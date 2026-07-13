@@ -5,10 +5,15 @@ namespace IvanBaric\Pages\Livewire\Admin;
 use Flux\Flux;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use IvanBaric\AdminUi\Support\HeroiconRegistry;
 use IvanBaric\Corexis\Data\ActionResult as CorexisActionResult;
+use IvanBaric\Pages\Actions\CreateSectionItemAction;
+use IvanBaric\Pages\Actions\DeleteSectionItemAction;
+use IvanBaric\Pages\Actions\ReorderSectionItemsAction;
+use IvanBaric\Pages\Actions\ToggleSectionItemVisibilityAction;
+use IvanBaric\Pages\Actions\UpdateSectionAction;
+use IvanBaric\Pages\Actions\UpdateSectionItemAction;
 use IvanBaric\Pages\Admin\Action;
 use IvanBaric\Pages\Admin\AdminSection;
 use IvanBaric\Pages\Admin\AdminSectionRegistry;
@@ -18,8 +23,8 @@ use IvanBaric\Pages\Admin\Tab;
 use IvanBaric\Pages\Livewire\Forms\ConfiguredSectionItemForm;
 use IvanBaric\Pages\Models\Section;
 use IvanBaric\Pages\Models\SectionItem;
+use IvanBaric\Pages\Support\PagesModels;
 use IvanBaric\Pages\Support\SectionItemGalleryImageSyncer;
-use IvanBaric\Pages\Support\TeamResolver;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
@@ -53,7 +58,8 @@ class ConfiguredItemsEditor extends Component
     public function mount(Section $section): void
     {
         $this->section = $section;
-        abort_unless($this->currentTeamId() === null || (int) $this->section->getAttribute('team_id') === $this->currentTeamId(), 404);
+        $sectionModel = PagesModels::section();
+        $this->section = $sectionModel::query()->whereKey($section->getKey())->firstOrFail();
 
         $this->resetItemForm();
         $this->tab = $this->validTabKey($this->tab);
@@ -75,16 +81,27 @@ class ConfiguredItemsEditor extends Component
         }
 
         $this->resetItemForm();
+        Flux::modal($this->modalName())->show();
     }
 
     public function editItem(string $uuid): void
     {
         $item = $this->findItem($uuid);
 
+        $this->resetItemForm();
         $this->editingItemUuid = (string) $item->getAttribute('uuid');
         $this->form->fillFromModel($item);
         $this->configureItemForm();
         $this->form->fillCustomDataFromModel($item);
+
+        Flux::modal($this->modalName())->show();
+    }
+
+    public function cancelItemForm(): void
+    {
+        if (! $this->usesInlineItemForm()) {
+            $this->resetItemForm();
+        }
     }
 
     public function saveItem(bool $showToast = true): void
@@ -102,7 +119,10 @@ class ConfiguredItemsEditor extends Component
             $data = $this->form->data();
         } catch (ValidationException $exception) {
             if ($showToast) {
-                $this->toast(false, __('Provjerite obavezna polja i pokušajte ponovno.'));
+                $this->toast(false, corexis_validation_toast_message(
+                    $exception,
+                    __('Provjerite obavezna polja i pokušajte ponovno.'),
+                ));
             }
 
             throw $exception;
@@ -151,7 +171,13 @@ class ConfiguredItemsEditor extends Component
 
     public function confirmDeleteItem(string $uuid): void
     {
-        $this->deletingItemUuid = $uuid;
+        $this->deletingItemUuid = (string) $this->findItem($uuid)->getAttribute('uuid');
+        Flux::modal($this->deleteModalName())->show();
+    }
+
+    public function cancelDeleteItem(): void
+    {
+        $this->deletingItemUuid = null;
     }
 
     public function deleteItem(): void
@@ -184,9 +210,14 @@ class ConfiguredItemsEditor extends Component
                 $this->saveSettings(showToast: false);
             }
         } catch (ValidationException $exception) {
-            $this->toast(false, __('Dogodila se pogreška prilikom spremanja podataka. Provjerite podatke i pokušajte ponovno.'));
+            $this->toast(false, corexis_validation_toast_message(
+                $exception,
+                __('Dogodila se pogreška prilikom spremanja podataka. Provjerite podatke i pokušajte ponovno.'),
+            ));
 
             throw $exception;
+        } finally {
+            $this->dispatch('pages-save-finished');
         }
 
         $this->toast(true, __('Promjene su spremljene.'));
@@ -201,7 +232,7 @@ class ConfiguredItemsEditor extends Component
         data_set($settings, $this->layoutSettingsPath(), $this->layoutVariant);
 
         foreach ($validatedSettings as $key => $value) {
-            $field = $this->settingsTab()?->field($key);
+            $field = $this->settingsField($key);
 
             if (! $field instanceof Field) {
                 continue;
@@ -216,7 +247,7 @@ class ConfiguredItemsEditor extends Component
         $this->section = $this->section->refresh();
         $this->settingsForm = $this->initialSettingsForm((array) $this->section->getAttribute('settings'));
 
-        $messageKey = $this->tab === $this->settingsTabKey() ? 'settings_saved' : 'layout_saved';
+        $messageKey = in_array($this->tab, $this->settingsTabKeys(), true) ? 'settings_saved' : 'layout_saved';
         $message = $this->definition()?->message($messageKey, __('Postavke sekcije su spremljene.'));
 
         if ($showToast) {
@@ -224,7 +255,7 @@ class ConfiguredItemsEditor extends Component
         }
     }
 
-    /** @return Collection<int, Model> */
+    /** @return Collection<int, SectionItem> */
     #[Computed]
     public function items(): Collection
     {
@@ -260,7 +291,7 @@ class ConfiguredItemsEditor extends Component
         );
     }
 
-    /** @return array<int, array{value: string, label: string, description: string}> */
+    /** @return array<int, array<string, mixed>> */
     public function layoutVariants(): array
     {
         return array_map(
@@ -283,7 +314,7 @@ class ConfiguredItemsEditor extends Component
     {
         $max = (int) ($this->itemsTab()?->optionValue('max_items', 0) ?? 0);
 
-        return $max <= 0 || $this->items->count() < $max;
+        return $max <= 0 || $this->items()->count() < $max;
     }
 
     public function usesInlineItemForm(): bool
@@ -334,6 +365,8 @@ class ConfiguredItemsEditor extends Component
             'showContent' => $content instanceof Field,
             'showValueSuffix' => $valueSuffix instanceof Field,
             'showIconHelp' => $icon instanceof Field && (bool) $icon->optionValue('show_help', true),
+            'iconPicker' => $icon instanceof Field && $this->iconPickerEnabled($icon),
+            'iconOptions' => $icon instanceof Field ? $this->fieldOptions($icon) : [],
             'showSortOrder' => (bool) $tab?->optionValue('show_sort_order', false),
             'showVisibility' => (bool) $tab?->optionValue('show_visibility', true),
             'customFields' => $this->customItemFields($tab),
@@ -342,6 +375,7 @@ class ConfiguredItemsEditor extends Component
             'singleColumnFields' => (bool) $tab?->optionValue('single_column', false),
             'contentRows' => (int) $content?->optionValue('rows', 7),
             'imageUploadSize' => $this->imageUploadSize($image?->optionValue('size')),
+            'imageFit' => $image?->optionValue('fit'),
             'imageLabel' => $image?->labelValue() ?: __('Slika ili logo'),
             'imageHelp' => $image?->optionValue('help', corexis_image_upload()->helpText()),
             'iconLabel' => $icon?->labelValue() ?: __('Ikona'),
@@ -408,17 +442,9 @@ class ConfiguredItemsEditor extends Component
     /** @return array<int, array<string, mixed>> */
     public function settingsFields(): array
     {
-        return array_map(
-            fn (Field $field): array => [
-                'key' => $field->key(),
-                'type' => $field->type(),
-                'label' => $field->labelValue(),
-                'help' => $field->optionValue('help', ''),
-                'options' => $this->fieldOptions($field),
-                'rows' => (int) $field->optionValue('rows', 4),
-            ],
-            $this->settingsTab()?->fieldsValue() ?? [],
-        );
+        $tab = $this->settingsTab();
+
+        return $tab instanceof Tab ? $this->settingsFieldsForTab($tab) : [];
     }
 
     public function hasSourceTab(): bool
@@ -438,7 +464,21 @@ class ConfiguredItemsEditor extends Component
 
     public function hasSettingsTab(): bool
     {
-        return $this->settingsTab() instanceof Tab;
+        return $this->settingsTabs() !== [];
+    }
+
+    /** @return array<int, array{key: string, heading: string, description: string, fields: array<int, array<string, mixed>>}> */
+    public function settingsPanels(): array
+    {
+        return array_map(
+            fn (Tab $tab): array => [
+                'key' => $tab->key(),
+                'heading' => (string) ($tab->optionValue('heading', __('Postavke sekcije')) ?? __('Postavke sekcije')),
+                'description' => (string) ($tab->optionValue('description', __('Uredite postavke prikaza za ovu sekciju.')) ?? __('Uredite postavke prikaza za ovu sekciju.')),
+                'fields' => $this->settingsFieldsForTab($tab),
+            ],
+            $this->settingsTabs(),
+        );
     }
 
     /** @return array<int, array<string, mixed>> */
@@ -531,12 +571,10 @@ class ConfiguredItemsEditor extends Component
         foreach ($tab->fieldsValue() as $field) {
             $property = $this->formPropertyForField($field);
 
-            if ($property === null) {
-                continue;
-            }
+            $fieldRules = $this->rulesForField($field);
 
-            if ($field->rulesValue() !== []) {
-                $rules[$property] = $field->rulesValue();
+            if ($fieldRules !== []) {
+                $rules[$property] = $fieldRules;
             }
 
             if ($field->labelValue() !== '') {
@@ -559,10 +597,6 @@ class ConfiguredItemsEditor extends Component
     private function findItem(string $uuid): SectionItem
     {
         $item = $this->section->items()->where('uuid', $uuid)->firstOrFail();
-
-        if (! $item instanceof SectionItem) {
-            abort(404);
-        }
 
         return $item;
     }
@@ -592,6 +626,12 @@ class ConfiguredItemsEditor extends Component
         return $this->definition()?->settingsTab();
     }
 
+    /** @return array<int, Tab> */
+    private function settingsTabs(): array
+    {
+        return $this->definition()?->settingsTabs() ?? [];
+    }
+
     private function applyHiddenTitleFallback(): void
     {
         if ($this->itemsTab()?->field('title') instanceof Field || trim($this->form->title) !== '') {
@@ -607,7 +647,7 @@ class ConfiguredItemsEditor extends Component
     {
         $tabs = array_values($this->definition()?->tabsValue() ?? []);
 
-        return $tabs[0]?->key() ?? 'content';
+        return $tabs === [] ? 'content' : $tabs[0]->key();
     }
 
     private function validTabKey(?string $tab): string
@@ -661,12 +701,15 @@ class ConfiguredItemsEditor extends Component
         return str_starts_with($storage, 'settings.') ? substr($storage, 9) : 'layout_variant';
     }
 
-    /** @param array<string, mixed> $settings */
+    /**
+     * @param  array<string, mixed>  $settings
+     * @return array<string, mixed>
+     */
     private function initialSettingsForm(array $settings): array
     {
         $values = [];
 
-        foreach ($this->settingsTab()?->fieldsValue() ?? [] as $field) {
+        foreach ($this->settingsFieldsValue() as $field) {
             $values[$field->key()] = data_get($settings, $this->settingsStoragePath($field), $field->optionValue('default'));
         }
 
@@ -676,18 +719,20 @@ class ConfiguredItemsEditor extends Component
     /** @return array<string, mixed> */
     private function validatedSettingsForm(): array
     {
-        $tab = $this->settingsTab();
+        $fields = $this->settingsFieldsValue();
 
-        if (! $tab instanceof Tab) {
+        if ($fields === []) {
             return [];
         }
 
         $rules = [];
         $attributes = [];
 
-        foreach ($tab->fieldsValue() as $field) {
-            if ($field->rulesValue() !== []) {
-                $rules['settingsForm.'.$field->key()] = $field->rulesValue();
+        foreach ($fields as $field) {
+            $fieldRules = $this->rulesForField($field);
+
+            if ($fieldRules !== []) {
+                $rules['settingsForm.'.$field->key()] = $fieldRules;
             }
 
             if ($field->labelValue() !== '') {
@@ -706,6 +751,54 @@ class ConfiguredItemsEditor extends Component
         return $this->settingsForm;
     }
 
+    /** @return array<int, Field> */
+    private function settingsFieldsValue(): array
+    {
+        if ($this->settingsTabs() === []) {
+            return [];
+        }
+
+        return array_merge(...array_map(
+            static fn (Tab $tab): array => $tab->fieldsValue(),
+            $this->settingsTabs(),
+        ));
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function settingsFieldsForTab(Tab $tab): array
+    {
+        return array_map(
+            fn (Field $field): array => [
+                'key' => $field->key(),
+                'type' => $field->type(),
+                'label' => $field->labelValue(),
+                'help' => $field->optionValue('help', ''),
+                'options' => $this->fieldOptions($field),
+                'display' => (string) $field->optionValue('display', ''),
+                'rows' => (int) $field->optionValue('rows', 4),
+                'picker' => $this->iconPickerEnabled($field),
+            ],
+            $tab->fieldsValue(),
+        );
+    }
+
+    private function settingsField(string $key): ?Field
+    {
+        foreach ($this->settingsFieldsValue() as $field) {
+            if ($field->key() === $key) {
+                return $field;
+            }
+        }
+
+        return null;
+    }
+
+    /** @return array<int, string> */
+    private function settingsTabKeys(): array
+    {
+        return array_map(static fn (Tab $tab): string => $tab->key(), $this->settingsTabs());
+    }
+
     private function settingsStoragePath(Field $field): string
     {
         $storage = (string) ($field->optionValue('storage', $field->key()) ?? $field->key());
@@ -715,6 +808,10 @@ class ConfiguredItemsEditor extends Component
 
     private function normalizeSettingValue(Field $field, mixed $value): mixed
     {
+        if ($field->type() === 'icon' && $this->iconPickerEnabled($field)) {
+            return filled($value) ? HeroiconRegistry::safe((string) $value) : null;
+        }
+
         if ($field->type() === 'boolean') {
             return (bool) $value;
         }
@@ -736,16 +833,50 @@ class ConfiguredItemsEditor extends Component
         return is_string($value) ? trim($value) : $value;
     }
 
-    /** @return array<int, array{value: mixed, label: string}> */
+    /** @return array<int, mixed> */
+    private function rulesForField(Field $field): array
+    {
+        $rules = $field->rulesValue();
+
+        if ($field->type() === 'icon' && $this->iconPickerEnabled($field)) {
+            $rules = array_values(array_filter(
+                $rules,
+                static fn (string $rule): bool => ! str_starts_with($rule, 'max:'),
+            ));
+            $rules[] = 'in:'.implode(',', HeroiconRegistry::names());
+        }
+
+        if ($field->type() === 'icon' && ! $this->iconPickerEnabled($field) && $this->fieldOptions($field) !== []) {
+            $rules = array_values(array_filter(
+                $rules,
+                static fn (string $rule): bool => ! str_starts_with($rule, 'max:'),
+            ));
+
+            $rules[] = 'in:'.implode(',', array_map(
+                static fn (array $option): string => (string) $option['value'],
+                $this->fieldOptions($field),
+            ));
+        }
+
+        return $rules;
+    }
+
+    private function iconPickerEnabled(Field $field): bool
+    {
+        return $field->type() === 'icon' && (bool) $field->optionValue('picker', true);
+    }
+
+    /** @return array<int, array<string, mixed>> */
     private function fieldOptions(Field $field): array
     {
-        return array_values(array_map(
+        return array_map(
             static function (mixed $key, mixed $option): array {
                 if (is_array($option)) {
-                    return [
+                    return array_replace($option, [
                         'value' => $option['value'] ?? $key,
                         'label' => (string) ($option['label'] ?? $option['value'] ?? $key),
-                    ];
+                        'description' => (string) ($option['description'] ?? ''),
+                    ]);
                 }
 
                 return [
@@ -755,7 +886,7 @@ class ConfiguredItemsEditor extends Component
             },
             array_keys((array) $field->optionValue('options', [])),
             (array) $field->optionValue('options', []),
-        ));
+        );
     }
 
     /** @return array<int, array<string, mixed>> */
@@ -773,6 +904,7 @@ class ConfiguredItemsEditor extends Component
                 'help' => $field->optionValue('help', ''),
                 'options' => $this->fieldOptions($field),
                 'rows' => (int) $field->optionValue('rows', 4),
+                'picker' => $this->iconPickerEnabled($field),
             ],
             array_filter(
                 $tab->fieldsValue(),
@@ -830,13 +962,13 @@ class ConfiguredItemsEditor extends Component
     {
         return match ($size) {
             'small' => 'size-32',
-            'medium', null => 'w-full aspect-[4/3]',
+            'medium', null => 'w-full aspect-video',
             'large' => 'w-full aspect-video',
-            default => is_string($size) ? $size : 'w-full aspect-[4/3]',
+            default => is_string($size) ? $size : 'w-full aspect-video',
         };
     }
 
-    private function formPropertyForField(Field $field): ?string
+    private function formPropertyForField(Field $field): string
     {
         return match ($field->key()) {
             'image' => 'imageUpload',
@@ -863,6 +995,10 @@ class ConfiguredItemsEditor extends Component
 
         $action = app($class);
 
+        if (! is_object($action)) {
+            return null;
+        }
+
         if (method_exists($action, 'execute')) {
             return $action->execute(...$arguments);
         }
@@ -882,15 +1018,28 @@ class ConfiguredItemsEditor extends Component
         unset($data['_image_upload'], $data['_remove_image']);
 
         if ($item instanceof SectionItem) {
-            $item->fill($data)->save();
-            $this->syncItemImage($item, $upload, $removeImage);
+            $result = app(UpdateSectionItemAction::class)->handle($item, $data + [
+                'lock_version' => (int) $item->getAttribute('lock_version'),
+            ]);
 
-            return CorexisActionResult::success(__('Stavka je spremljena.'), ['item' => $item->refresh()]);
+            if ($result->failed() || ! $result->data instanceof SectionItem) {
+                return $result;
+            }
+
+            $this->syncItemImage($result->data, $upload, $removeImage);
+
+            return CorexisActionResult::success(__('Stavka je spremljena.'), ['item' => $result->data->refresh()]);
         }
 
-        $created = $this->section->addItem($data + [
+        $result = app(CreateSectionItemAction::class)->handle($this->section, $data + [
             'sort_order' => ((int) $this->section->items()->max('sort_order')) + 1,
         ]);
+
+        if ($result->failed() || ! $result->data instanceof SectionItem) {
+            return $result;
+        }
+
+        $created = $result->data;
         $this->syncItemImage($created, $upload, $removeImage);
 
         return CorexisActionResult::success(__('Stavka je dodana.'), ['item' => $created->refresh()]);
@@ -911,62 +1060,45 @@ class ConfiguredItemsEditor extends Component
 
     private function toggleItemFallback(SectionItem $item): CorexisActionResult
     {
-        $item->isVisible() ? $item->hide() : $item->show();
-
-        return CorexisActionResult::success(
-            $item->fresh()->isVisible()
-                ? __('Stavka je uključena.')
-                : __('Stavka je isključena.'),
-        );
+        return app(ToggleSectionItemVisibilityAction::class)->handle($item);
     }
 
     private function reorderItemFallback(SectionItem $item, int $position): CorexisActionResult
     {
-        DB::transaction(function () use ($item, $position): void {
-            $items = $item->section
-                ->items()
-                ->orderBy('sort_order')
-                ->orderBy('created_at')
-                ->get();
+        $items = $item->section->items()->ordered()->get();
+        $moving = $items->firstWhere('id', $item->getKey());
 
-            $moving = $items->firstWhere('id', $item->getKey());
+        if (! $moving instanceof SectionItem) {
+            return CorexisActionResult::error(__('Stavka nije pronađena.'));
+        }
 
-            if (! $moving instanceof SectionItem) {
-                return;
-            }
+        $items = $items->reject(fn (SectionItem $current): bool => $current->is($moving))->values();
+        $items->splice(max(0, min($position, $items->count())), 0, [$moving]);
 
-            $items = $items
-                ->reject(fn (SectionItem $current): bool => $current->is($moving))
-                ->values();
-
-            $items->splice(max(0, min($position, $items->count())), 0, [$moving]);
-
-            $items->values()->each(function (SectionItem $current, int $index): void {
-                $current->forceFill(['sort_order' => $index])->save();
-            });
-        });
-
-        return CorexisActionResult::success(__('Redoslijed stavki je spremljen.'));
+        return app(ReorderSectionItemsAction::class)->handle($item->section, $items->pluck('uuid')->all());
     }
 
     private function deleteItemFallback(SectionItem $item): CorexisActionResult
     {
-        $item->archive();
-
-        return CorexisActionResult::success(__('Stavka je arhivirana.'));
+        return app(DeleteSectionItemAction::class)->handle($item);
     }
 
     /** @param array<string, mixed> $data */
     private function saveSectionFallback(array $data): CorexisActionResult
     {
-        $this->section->fill($data)->save();
+        $result = app(UpdateSectionAction::class)->handle($this->section, $data + [
+            'type' => (string) $this->section->getAttribute('type'),
+            'lock_version' => (int) $this->section->getAttribute('lock_version'),
+        ]);
 
-        return CorexisActionResult::success(__('Sekcija je spremljena.'), ['section' => $this->section->refresh()]);
+        return $result->failed()
+            ? $result
+            : CorexisActionResult::success(__('Sekcija je spremljena.'), ['section' => $this->section->refresh()]);
     }
 
     private function resultSuccessful(mixed $result): bool
     {
-        return (bool) ($result->success ?? $result->successful ?? false);
+        return (bool) ($result->success ?? false);
     }
 
     private function resultMessage(mixed $result): string
@@ -982,10 +1114,5 @@ class ConfiguredItemsEditor extends Component
     private function toast(bool $success, string $message): void
     {
         Flux::toast(variant: $success ? 'success' : 'danger', text: $message);
-    }
-
-    private function currentTeamId(): ?int
-    {
-        return app(TeamResolver::class)->resolve();
     }
 }

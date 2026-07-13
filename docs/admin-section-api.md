@@ -234,7 +234,10 @@ AdminSection::add('template_header')
                 Field::image('image')
                     ->label(__('Slika zaglavlja'))
                     ->size('w-full aspect-[16/9]')
-                    ->option('directory', 'template-headers'),
+                    ->mediaCollection('website_header_image')
+                    ->storeAsGalleryMedia()
+                    ->option('media_conversion', 'xlarge')
+                    ->option('store_value', false),
             ]),
 
         Tab::layout(__('Izgled'))

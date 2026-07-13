@@ -8,11 +8,14 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Collection;
+use IvanBaric\Pages\Actions\ForceDeleteArchivedRecordAction;
+use IvanBaric\Pages\Actions\RestoreArchivedRecordAction;
 use IvanBaric\Pages\Models\Page;
 use IvanBaric\Pages\Models\Section;
 use IvanBaric\Pages\Models\SectionItem;
-use IvanBaric\Pages\Support\TeamResolver;
+use IvanBaric\Pages\Support\PagesModels;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -22,16 +25,22 @@ class PageArchive extends Component
 
     public string $search = '';
 
+    #[Locked]
     public ?string $restoringType = null;
 
+    #[Locked]
     public ?string $restoringUuid = null;
 
+    #[Locked]
     public string $restoringName = '';
 
+    #[Locked]
     public ?string $deletingType = null;
 
+    #[Locked]
     public ?string $deletingUuid = null;
 
+    #[Locked]
     public string $deletingName = '';
 
     public function updatedSearch(): void
@@ -52,9 +61,16 @@ class PageArchive extends Component
         $this->restoringType = $type;
         $this->restoringUuid = $uuid;
         $this->restoringName = $this->recordName($record, $type);
+
+        Flux::modal('archive-restore')->show();
     }
 
-    public function restore(): void
+    public function cancelRestore(): void
+    {
+        $this->reset('restoringType', 'restoringUuid', 'restoringName');
+    }
+
+    public function restore(RestoreArchivedRecordAction $action): void
     {
         if (! $this->restoringType || ! $this->restoringUuid) {
             Flux::toast(variant: 'danger', text: __('Arhivirani zapis nije pronađen.'));
@@ -62,22 +78,20 @@ class PageArchive extends Component
             return;
         }
 
-        $record = $this->findArchivedRecord($this->restoringType, $this->restoringUuid);
+        $result = $action->handle($this->restoringType, $this->restoringUuid);
 
-        if (! $record instanceof Model || ! method_exists($record, 'restore')) {
-            Flux::toast(variant: 'danger', text: __('Arhivirani zapis nije pronađen.'));
+        if ($result->failed()) {
+            Flux::toast(variant: 'danger', text: $result->message);
 
             return;
         }
-
-        $record->restore();
 
         $this->reset('restoringType', 'restoringUuid', 'restoringName');
         unset($this->archivedRecords);
         $this->resetPage();
 
         Flux::modal('archive-restore')->close();
-        Flux::toast(variant: 'success', text: __('Zapis je vraćen iz arhive.'));
+        Flux::toast(variant: 'success', text: $result->message);
     }
 
     public function confirmDelete(string $type, string $uuid): void
@@ -93,9 +107,16 @@ class PageArchive extends Component
         $this->deletingType = $type;
         $this->deletingUuid = $uuid;
         $this->deletingName = $this->recordName($record, $type);
+
+        Flux::modal('archive-delete')->show();
     }
 
-    public function delete(): void
+    public function cancelDelete(): void
+    {
+        $this->reset('deletingType', 'deletingUuid', 'deletingName');
+    }
+
+    public function delete(ForceDeleteArchivedRecordAction $action): void
     {
         if (! $this->deletingType || ! $this->deletingUuid) {
             Flux::toast(variant: 'danger', text: __('Arhivirani zapis nije pronađen.'));
@@ -103,22 +124,20 @@ class PageArchive extends Component
             return;
         }
 
-        $record = $this->findArchivedRecord($this->deletingType, $this->deletingUuid);
+        $result = $action->handle($this->deletingType, $this->deletingUuid);
 
-        if (! $record instanceof Model || ! method_exists($record, 'forceDelete')) {
-            Flux::toast(variant: 'danger', text: __('Arhivirani zapis nije pronađen.'));
+        if ($result->failed()) {
+            Flux::toast(variant: 'danger', text: $result->message);
 
             return;
         }
-
-        $record->forceDelete();
 
         $this->reset('deletingType', 'deletingUuid', 'deletingName');
         unset($this->archivedRecords);
         $this->resetPage();
 
         Flux::modal('archive-delete')->close();
-        Flux::toast(variant: 'success', text: __('Zapis je trajno obrisan.'));
+        Flux::toast(variant: 'success', text: $result->message);
     }
 
     /** @return Paginator<int, array<string, mixed>> */
@@ -151,11 +170,6 @@ class PageArchive extends Component
             ->layout('layouts.app', ['title' => __('Arhiva')]);
     }
 
-    private function currentTeamId(): ?int
-    {
-        return app(TeamResolver::class)->resolve();
-    }
-
     private function findArchivedRecord(string $type, string $uuid): ?Model
     {
         $model = $this->modelClassForType($type);
@@ -166,7 +180,6 @@ class PageArchive extends Component
 
         /** @var Model|null $record */
         $record = $model::onlyTrashed()
-            ->forTeam($this->currentTeamId())
             ->where('uuid', $uuid)
             ->first();
 
@@ -182,34 +195,31 @@ class PageArchive extends Component
             ->merge($this->archivedItems()->map(fn (Model $item): array => $this->recordRow($item, 'item')));
     }
 
-    /** @return EloquentCollection<int, Model> */
+    /** @return EloquentCollection<int, Page> */
     private function archivedPages(): EloquentCollection
     {
-        $model = config('pages.models.page', Page::class);
+        $model = PagesModels::page();
 
         return $model::onlyTrashed()
-            ->forTeam($this->currentTeamId())
             ->get();
     }
 
-    /** @return EloquentCollection<int, Model> */
+    /** @return EloquentCollection<int, Section> */
     private function archivedSections(): EloquentCollection
     {
-        $model = config('pages.models.section', Section::class);
+        $model = PagesModels::section();
 
         return $model::onlyTrashed()
-            ->forTeam($this->currentTeamId())
             ->with(['page' => fn ($query) => $query->withTrashed()])
             ->get();
     }
 
-    /** @return EloquentCollection<int, Model> */
+    /** @return EloquentCollection<int, SectionItem> */
     private function archivedItems(): EloquentCollection
     {
-        $model = config('pages.models.section_item', SectionItem::class);
+        $model = PagesModels::sectionItem();
 
         return $model::onlyTrashed()
-            ->forTeam($this->currentTeamId())
             ->with([
                 'section' => fn ($query) => $query
                     ->withTrashed()
@@ -309,7 +319,10 @@ class PageArchive extends Component
         ])->filter()->implode(' ');
     }
 
-    /** @param Collection<int, array<string, mixed>> $records */
+    /**
+     * @param  Collection<int, array<string, mixed>>  $records
+     * @return Collection<int, array<string, mixed>>
+     */
     private function filterRecords(Collection $records): Collection
     {
         $search = str(trim($this->search))->lower()->toString();
@@ -332,9 +345,9 @@ class PageArchive extends Component
     private function modelClassForType(string $type): ?string
     {
         return match ($type) {
-            'page' => (string) config('pages.models.page', Page::class),
-            'section' => (string) config('pages.models.section', Section::class),
-            'item' => (string) config('pages.models.section_item', SectionItem::class),
+            'page' => PagesModels::page(),
+            'section' => PagesModels::section(),
+            'item' => PagesModels::sectionItem(),
             default => null,
         };
     }

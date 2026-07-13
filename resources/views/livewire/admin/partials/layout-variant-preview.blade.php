@@ -33,28 +33,37 @@
         </span>
     </span>
 @elseif ($preview === 'header_editorial')
-    <span class="relative block h-full overflow-hidden rounded-md bg-white shadow-sm">
-        <svg class="absolute inset-y-0 right-0 h-full w-[58%]" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-            <path d="M10.5 0 H100 V100 H3.4 C1.2 100 0.2 98.2 0.6 95.8 L9.4 4 C9.7 1.6 10.1 0 10.5 0 Z" fill="#bae6fd" />
-            <circle cx="58" cy="28" r="11" fill="#bbf7d0" />
-            <rect x="58" y="67" width="28" height="16" rx="5" fill="#fef3c7" />
-        </svg>
-        <span class="absolute inset-y-0 left-0 w-[52%]">
-            <span class="flex h-full flex-col justify-center p-2 pr-4">
-                <span class="flex items-start gap-2">
-                    <span class="size-7 shrink-0 rounded-md bg-white shadow-sm ring-1 ring-zinc-200">
-                        <span class="m-1.5 block size-4 rounded-full bg-emerald-100"></span>
-                    </span>
-                    <span class="grid flex-1 gap-1.5">
-                        <span class="h-1.5 w-10 rounded bg-emerald-200"></span>
-                        <span class="h-2.5 rounded bg-zinc-900"></span>
-                        <span class="h-1.5 w-4/5 rounded bg-zinc-300"></span>
-                        <span class="mt-1 flex gap-1">
-                            <span class="h-2 w-9 rounded-full bg-emerald-200"></span>
-                            <span class="h-2 w-8 rounded-full bg-white ring-1 ring-zinc-200"></span>
-                        </span>
-                    </span>
-                </span>
+    <span class="relative block h-full overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-emerald-100">
+        <span class="absolute inset-0 bg-sky-50"></span>
+        <span class="absolute left-4 top-6 h-12 w-20 rounded-md bg-yellow-100"></span>
+        <span class="absolute bottom-4 right-5 h-12 w-20 rounded-md bg-emerald-100"></span>
+        <span class="absolute right-10 top-10 size-10 rounded-full bg-pink-100"></span>
+        <span class="absolute left-10 bottom-7 size-8 rounded-full bg-sky-100"></span>
+        <span class="absolute inset-0 bg-white/20"></span>
+        <span class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(39,39,42,0.30)_0%,rgba(39,39,42,0.14)_42%,rgba(255,255,255,0.08)_72%,rgba(255,255,255,0.20)_100%)]"></span>
+        <span class="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white/55 to-transparent"></span>
+        <span class="absolute left-2 right-2 top-2 flex items-center justify-between rounded-full bg-white/95 px-2 py-1 shadow-sm ring-1 ring-pink-100">
+            <span class="flex items-center gap-1.5">
+                <span class="size-4 rounded-full bg-emerald-100"></span>
+                <span class="h-2 w-12 rounded bg-zinc-900"></span>
+            </span>
+            <span class="flex gap-1">
+                <span class="h-2 w-7 rounded bg-pink-200"></span>
+                <span class="h-2 w-6 rounded bg-yellow-100"></span>
+                <span class="h-2 w-6 rounded bg-sky-100"></span>
+            </span>
+        </span>
+        <span class="absolute inset-x-[24%] top-10 flex flex-col items-center gap-1.5">
+            <span class="size-8 rounded-md bg-white shadow-sm ring-1 ring-zinc-200">
+                <span class="m-2 block size-4 rounded-full bg-emerald-100"></span>
+            </span>
+            <span class="h-1.5 w-20 rounded bg-white/90"></span>
+            <span class="h-3 w-24 rounded bg-white shadow-sm"></span>
+            <span class="h-3 w-20 rounded bg-white shadow-sm"></span>
+            <span class="h-1.5 w-24 rounded bg-white/80"></span>
+            <span class="mt-1 flex gap-1">
+                <span class="h-2 w-9 rounded-full bg-white"></span>
+                <span class="h-2 w-8 rounded-full bg-white/45 ring-1 ring-white/80"></span>
             </span>
         </span>
     </span>
@@ -117,15 +126,13 @@
         </span>
     </span>
 @elseif ($preview === 'header_craft')
-    <span class="relative block h-full overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-emerald-100">
-        <span class="absolute inset-y-0 right-0 w-[55%] bg-emerald-100">
+    <span class="relative block h-full overflow-hidden rounded-md bg-[#fffaf1] shadow-sm ring-1 ring-emerald-100">
+        <span class="absolute inset-y-0 right-0 w-[64%] bg-emerald-100">
             <span class="absolute right-7 top-4 h-8 w-11 rounded-md bg-yellow-100"></span>
             <span class="absolute bottom-4 right-3 h-8 w-14 rounded-md bg-sky-100"></span>
             <span class="absolute bottom-7 left-7 size-8 rounded-full bg-green-100"></span>
+            <span class="absolute inset-y-0 left-0 w-[42%] bg-gradient-to-r from-[#fffaf1] via-[#fffaf1]/80 to-transparent"></span>
         </span>
-        <svg class="absolute inset-0 h-full w-full" viewBox="0 0 1600 760" preserveAspectRatio="none" aria-hidden="true">
-            <path d="M0 0H880C845 110 805 220 765 330C730 435 735 560 810 760H0Z" fill="white" />
-        </svg>
         <span class="absolute left-2 right-2 top-2 flex items-center justify-between rounded-full bg-white/95 px-2 py-1 shadow-sm ring-1 ring-pink-100">
             <span class="flex items-center gap-1.5">
                 <span class="size-4 rounded-full bg-emerald-100"></span>
@@ -206,7 +213,7 @@
             <span class="absolute inset-0 bg-gradient-to-r from-emerald-200 via-emerald-100 to-yellow-100"></span>
             <span class="absolute bottom-3 right-5 h-8 w-14 rounded-md bg-white/70"></span>
             <span class="absolute right-10 top-4 size-8 rounded-full bg-emerald-200"></span>
-            <span class="absolute inset-y-0 left-0 w-[56%] bg-emerald-900/50"></span>
+            <span class="absolute inset-y-0 left-0 w-[56%] bg-emerald-900/40"></span>
             <span class="absolute left-3 top-5 inline-flex items-center gap-1 rounded-full border border-white/30 px-2 py-1">
                 <span class="size-2 rounded-full bg-yellow-200"></span>
                 <span class="h-1.5 w-12 rounded bg-white/80"></span>
@@ -219,6 +226,48 @@
                 <span class="mt-2 flex gap-1.5">
                     <span class="h-3 w-12 rounded bg-yellow-200"></span>
                     <span class="h-3 w-11 rounded border border-white/70 bg-white/10"></span>
+                </span>
+            </span>
+        </span>
+    </span>
+@elseif ($preview === 'header_gallery_frame')
+    <span class="relative flex h-full flex-col overflow-hidden rounded-md bg-white p-2 shadow-sm ring-1 ring-emerald-100">
+        <span class="flex h-5 items-center justify-between px-1">
+            <span class="flex items-center gap-1.5">
+                <span class="size-3.5 rounded-full bg-emerald-100 ring-1 ring-emerald-200"></span>
+                <span class="h-1.5 w-12 rounded bg-zinc-900"></span>
+            </span>
+            <span class="flex gap-1">
+                <span class="relative h-1.5 w-6 rounded bg-emerald-100">
+                    <span class="absolute inset-x-0 -bottom-1 h-0.5 rounded-full bg-emerald-300"></span>
+                </span>
+                <span class="h-1.5 w-6 rounded bg-sky-100"></span>
+                <span class="h-1.5 w-6 rounded bg-yellow-100"></span>
+            </span>
+        </span>
+        <span class="relative mt-1.5 min-h-0 flex-1 overflow-hidden rounded-md bg-emerald-100">
+            <span class="absolute inset-0 bg-gradient-to-r from-sky-100 via-emerald-100 to-yellow-100"></span>
+            <span class="absolute bottom-3 left-6 h-8 w-14 rounded-md bg-white/55"></span>
+            <span class="absolute right-7 top-4 size-9 rounded-full bg-emerald-200"></span>
+            <span class="absolute bottom-4 right-12 h-7 w-12 rounded-md bg-yellow-100"></span>
+        </span>
+        <span class="grid grid-cols-[1.08fr_0.92fr] items-end gap-2 px-1 pb-0.5 pt-2">
+            <span class="flex items-start gap-1.5">
+                <span class="size-6 shrink-0 rounded-md bg-white shadow-sm ring-1 ring-zinc-200">
+                    <span class="m-1.5 block size-3 rounded-full bg-emerald-100"></span>
+                </span>
+                <span class="grid flex-1 gap-1">
+                    <span class="h-1.5 w-14 rounded bg-emerald-200"></span>
+                    <span class="h-3 w-full rounded bg-zinc-900"></span>
+                    <span class="h-3 w-4/5 rounded bg-zinc-900"></span>
+                </span>
+            </span>
+            <span class="grid gap-1.5">
+                <span class="h-1.5 w-full rounded bg-zinc-300"></span>
+                <span class="h-1.5 w-4/5 rounded bg-zinc-300"></span>
+                <span class="mt-0.5 flex gap-1">
+                    <span class="h-2.5 w-11 rounded bg-emerald-200"></span>
+                    <span class="h-2.5 w-9 rounded border border-emerald-200 bg-white"></span>
                 </span>
             </span>
         </span>
@@ -260,6 +309,140 @@
             <span class="h-1.5 w-28 rounded bg-zinc-500"></span>
             <span class="h-1.5 w-16 rounded bg-sky-200"></span>
         </span>
+    </span>
+@elseif (in_array($preview, ['section_header_left', 'section_header_center', 'section_header_center_rule', 'section_header_split', 'section_header_side_label', 'section_header_marker', 'section_header_left_accent', 'section_header_center_accent', 'section_header_split_accent', 'section_header_left_colored', 'section_header_center_colored', 'section_header_split_colored'], true))
+    @php
+        $isCenteredSectionHeader = in_array($preview, ['section_header_center', 'section_header_center_rule', 'section_header_marker', 'section_header_center_accent', 'section_header_center_colored'], true);
+        $isCenterRuleSectionHeader = $preview === 'section_header_center_rule';
+        $isSplitSectionHeader = in_array($preview, ['section_header_split', 'section_header_split_accent', 'section_header_split_colored'], true);
+        $isSideLabelSectionHeader = $preview === 'section_header_side_label';
+        $isAccentSectionHeader = in_array($preview, ['section_header_left_accent', 'section_header_center_accent', 'section_header_split_accent'], true);
+        $isColoredSectionHeader = in_array($preview, ['section_header_left_colored', 'section_header_center_colored', 'section_header_split_colored'], true);
+        $isMarkerSectionHeader = $preview === 'section_header_marker';
+    @endphp
+
+    <span class="flex h-full flex-col justify-center rounded-md bg-white p-3 ring-1 ring-emerald-100">
+        @if ($isSideLabelSectionHeader)
+            <span class="grid grid-cols-[0.25rem_minmax(0,1fr)] items-stretch gap-3">
+                <span class="rounded-full bg-emerald-300"></span>
+
+                <span class="grid gap-1.5 py-1">
+                    <span class="h-2 w-16 rounded-full bg-emerald-100 ring-1 ring-emerald-200"></span>
+                    <span class="h-3.5 w-28 rounded bg-zinc-900"></span>
+                    <span class="h-3.5 w-20 rounded bg-zinc-900"></span>
+                    <span class="mt-1 h-1.5 w-32 max-w-full rounded bg-zinc-300"></span>
+                    <span class="h-1.5 w-24 max-w-full rounded bg-zinc-300"></span>
+                </span>
+            </span>
+        @elseif ($isSplitSectionHeader)
+            <span class="grid w-full gap-2.5">
+                <span @class([
+                    'h-2 w-16 rounded-full',
+                    'bg-emerald-100 px-2 ring-1 ring-emerald-200' => $isAccentSectionHeader,
+                    'bg-emerald-200' => ! $isAccentSectionHeader,
+                ])></span>
+
+                <span class="grid grid-cols-[1.05fr_0.95fr] items-end gap-2.5">
+                    <span class="grid gap-1.5">
+                        <span @class([
+                            'h-3.5 w-24 rounded',
+                            'bg-emerald-700' => $isAccentSectionHeader,
+                            'bg-zinc-900' => ! $isAccentSectionHeader,
+                        ])></span>
+                        <span @class([
+                            'h-3.5 w-16 rounded',
+                            'bg-emerald-700' => $isAccentSectionHeader || $isColoredSectionHeader,
+                            'bg-zinc-900' => ! $isAccentSectionHeader && ! $isColoredSectionHeader,
+                        ])></span>
+                    </span>
+
+                    <span class="grid gap-1.5">
+                        <span @class([
+                            'h-1.5 w-full rounded',
+                            'bg-emerald-200' => $isAccentSectionHeader,
+                            'bg-zinc-300' => ! $isAccentSectionHeader,
+                        ])></span>
+                        <span @class([
+                            'h-1.5 w-4/5 rounded',
+                            'bg-emerald-200' => $isAccentSectionHeader,
+                            'bg-zinc-300' => ! $isAccentSectionHeader,
+                        ])></span>
+                    </span>
+                </span>
+
+                @if ($isAccentSectionHeader)
+                    <span class="mt-1 flex gap-1">
+                        <span class="size-2 rounded-full bg-yellow-100 ring-1 ring-yellow-200"></span>
+                        <span class="size-2 rounded-full bg-sky-100 ring-1 ring-sky-200"></span>
+                        <span class="size-2 rounded-full bg-green-100 ring-1 ring-green-200"></span>
+                    </span>
+                @endif
+            </span>
+        @else
+            <span @class([
+                'flex w-full max-w-[9.5rem] flex-col gap-2',
+                'mx-auto items-center text-center' => $isCenteredSectionHeader,
+                'items-start' => ! $isCenteredSectionHeader,
+            ])>
+                <span @class([
+                    'h-2 w-16 rounded-full',
+                    'bg-emerald-100 px-2 ring-1 ring-emerald-200' => $isAccentSectionHeader,
+                    'bg-emerald-200' => ! $isAccentSectionHeader,
+                ])></span>
+
+                <span @class([
+                    'grid gap-1.5',
+                    'justify-items-center' => $isCenteredSectionHeader,
+                ])>
+                    <span @class([
+                        'h-3.5 w-28 rounded',
+                        'bg-emerald-700' => $isAccentSectionHeader,
+                        'bg-zinc-900' => ! $isAccentSectionHeader,
+                    ])></span>
+                    <span @class([
+                        'h-3.5 w-20 rounded',
+                        'bg-emerald-700' => $isAccentSectionHeader || $isColoredSectionHeader,
+                        'bg-emerald-100 ring-1 ring-emerald-200' => $isMarkerSectionHeader,
+                        'bg-zinc-900' => ! $isAccentSectionHeader && ! $isColoredSectionHeader && ! $isMarkerSectionHeader,
+                    ])></span>
+                </span>
+
+                @if ($isMarkerSectionHeader)
+                    <span class="-mt-1 h-1.5 w-20 rounded bg-emerald-200/80"></span>
+                @endif
+
+                @if ($isCenterRuleSectionHeader)
+                    <span class="h-0.5 w-16 rounded-full bg-emerald-300"></span>
+                @endif
+
+                <span @class([
+                    'grid w-full gap-1.5',
+                    'justify-items-center' => $isCenteredSectionHeader,
+                ])>
+                    <span @class([
+                        'h-1.5 w-32 max-w-full rounded',
+                        'bg-emerald-200' => $isAccentSectionHeader,
+                        'bg-zinc-300' => ! $isAccentSectionHeader,
+                    ])></span>
+                    <span @class([
+                        'h-1.5 w-24 max-w-full rounded',
+                        'bg-emerald-200' => $isAccentSectionHeader,
+                        'bg-zinc-300' => ! $isAccentSectionHeader,
+                    ])></span>
+                </span>
+
+                @if ($isAccentSectionHeader)
+                    <span @class([
+                        'mt-1 flex gap-1',
+                        'justify-center' => $isCenteredSectionHeader,
+                    ])>
+                        <span class="size-2 rounded-full bg-yellow-100 ring-1 ring-yellow-200"></span>
+                        <span class="size-2 rounded-full bg-sky-100 ring-1 ring-sky-200"></span>
+                        <span class="size-2 rounded-full bg-green-100 ring-1 ring-green-200"></span>
+                    </span>
+                @endif
+            </span>
+        @endif
     </span>
 @elseif ($preview === 'faq_cards')
     <span class="grid h-full grid-cols-2 gap-2">
@@ -591,6 +774,16 @@
             </span>
         @endforeach
     </span>
+@elseif ($preview === 'stats_compact_grid')
+    <span class="grid h-full grid-cols-4 gap-1.5">
+        @foreach ([['bg-emerald-100', 'bg-emerald-200'], ['bg-yellow-100', 'bg-yellow-200'], ['bg-sky-100', 'bg-sky-200'], ['bg-green-100', 'bg-green-200']] as $color)
+            <span class="flex flex-col justify-center rounded-md bg-white p-2">
+                <span class="mx-auto block h-2.5 w-8 rounded {{ $color[1] }}"></span>
+                <span class="mx-auto mt-2 block size-3 rounded-full {{ $color[0] }}"></span>
+                <span class="mt-1.5 block h-1.5 rounded bg-zinc-300"></span>
+            </span>
+        @endforeach
+    </span>
 @elseif ($preview === 'story_media_right')
     <span class="grid h-full grid-cols-[0.95fr_1fr] items-center gap-3">
         <span class="grid gap-2">
@@ -753,6 +946,71 @@
             </span>
         @endforeach
     </span>
+@elseif ($preview === 'products_store_grid')
+    <span class="grid h-full grid-cols-3 gap-2">
+        @foreach (['bg-emerald-100', 'bg-yellow-100', 'bg-sky-100'] as $color)
+            <span class="overflow-hidden rounded-md bg-white shadow-sm">
+                <span class="block h-12 {{ $color }}"></span>
+                <span class="grid gap-1.5 p-1.5">
+                    <span class="flex items-start justify-between gap-1">
+                        <span class="h-1.5 flex-1 rounded bg-zinc-900"></span>
+                        <span class="h-1.5 w-4 rounded bg-green-300"></span>
+                    </span>
+                    <span class="h-1.5 rounded bg-zinc-300"></span>
+                    <span class="h-1.5 w-2/3 rounded bg-zinc-300"></span>
+                </span>
+            </span>
+        @endforeach
+    </span>
+@elseif ($preview === 'products_scroll_showcase')
+    <span class="flex h-full gap-2 overflow-hidden">
+        @foreach (['bg-emerald-100', 'bg-yellow-100', 'bg-sky-100', 'bg-green-100'] as $color)
+            <span class="w-[32%] shrink-0 text-center">
+                <span class="block h-14 rounded-md {{ $color }} shadow-sm"></span>
+                <span class="mt-2 block h-1.5 rounded bg-zinc-300"></span>
+                <span class="mx-auto mt-1.5 block h-1.5 w-4/5 rounded bg-zinc-900"></span>
+                <span class="mx-auto mt-1.5 block h-1.5 w-1/2 rounded bg-green-300"></span>
+            </span>
+        @endforeach
+    </span>
+@elseif ($preview === 'product_single_classic')
+    <span class="grid h-full gap-2">
+        <span class="flex items-end justify-between gap-2">
+            <span class="grid flex-1 gap-1">
+                <span class="h-2.5 w-24 rounded bg-zinc-900"></span>
+                <span class="h-1.5 w-16 rounded bg-zinc-300"></span>
+            </span>
+            <span class="h-3 w-10 rounded-full bg-green-300"></span>
+        </span>
+        <span class="rounded-md bg-emerald-100 shadow-sm ring-1 ring-white/70"></span>
+        <span class="grid gap-1">
+            <span class="h-1.5 rounded bg-zinc-300"></span>
+            <span class="h-1.5 w-4/5 rounded bg-zinc-300"></span>
+        </span>
+    </span>
+@elseif ($preview === 'product_single_split')
+    <span class="grid h-full grid-cols-[1.05fr_0.95fr] gap-2">
+        <span class="rounded-md bg-emerald-100 shadow-sm ring-1 ring-white/70"></span>
+        <span class="grid content-start gap-1.5 rounded-md bg-white p-2 shadow-sm">
+            <span class="h-2.5 rounded bg-zinc-900"></span>
+            <span class="h-2 w-10 rounded-full bg-green-300"></span>
+            <span class="mt-1 h-1.5 rounded bg-zinc-300"></span>
+            <span class="h-1.5 rounded bg-zinc-300"></span>
+            <span class="h-1.5 w-2/3 rounded bg-zinc-300"></span>
+        </span>
+    </span>
+@elseif ($preview === 'product_single_editorial')
+    <span class="flex h-full flex-col items-center gap-2 text-center">
+        <span class="grid justify-items-center gap-1">
+            <span class="h-2.5 w-24 rounded bg-zinc-900"></span>
+            <span class="h-1.5 w-12 rounded-full bg-green-300"></span>
+        </span>
+        <span class="w-full flex-1 rounded-md bg-emerald-100 shadow-sm ring-1 ring-white/70"></span>
+        <span class="grid w-4/5 gap-1">
+            <span class="h-1.5 rounded bg-zinc-300"></span>
+            <span class="mx-auto h-1.5 w-3/4 rounded bg-zinc-300"></span>
+        </span>
+    </span>
 @elseif ($preview === 'products_catalog')
     <span class="grid h-full gap-2">
         @foreach (['bg-emerald-100', 'bg-yellow-100', 'bg-sky-100'] as $color)
@@ -805,6 +1063,33 @@
                     <span class="h-1.5 rounded bg-zinc-900"></span>
                     <span class="h-1.5 w-2/3 rounded bg-zinc-300"></span>
                 </span>
+            </span>
+        @endforeach
+    </span>
+@elseif ($preview === 'gallery_text_cards')
+    <span class="grid h-full grid-cols-3 gap-2">
+        @foreach (['bg-emerald-100', 'bg-yellow-100', 'bg-sky-100'] as $color)
+            <span class="flex flex-col rounded-md bg-white p-1.5 shadow-sm">
+                <span class="grid gap-1">
+                    <span class="h-1.5 rounded bg-zinc-900"></span>
+                    <span class="h-1.5 w-5/6 rounded bg-zinc-300"></span>
+                    <span class="h-1.5 w-1/2 rounded bg-green-300"></span>
+                </span>
+                <span class="mt-1.5 block flex-1 rounded-md {{ $color }}"></span>
+            </span>
+        @endforeach
+    </span>
+@elseif ($preview === 'gallery_masonry')
+    <span class="grid h-full grid-cols-4 gap-1.5">
+        @foreach ([['h-7 bg-emerald-100', 'h-11 bg-yellow-100', 'h-8 bg-sky-100'], ['h-12 bg-sky-100', 'h-9 bg-green-100'], ['h-8 bg-yellow-100', 'h-12 bg-emerald-100', 'h-7 bg-sky-100'], ['h-10 bg-green-100', 'h-9 bg-yellow-100']] as $column)
+            <span class="grid content-start gap-1.5">
+                @foreach ($column as $block)
+                    <span class="relative overflow-hidden rounded-md {{ $block }} shadow-sm">
+                        <span class="absolute inset-x-1 bottom-1 rounded bg-white/90 p-0.5">
+                            <span class="block h-1 rounded bg-zinc-900"></span>
+                        </span>
+                    </span>
+                @endforeach
             </span>
         @endforeach
     </span>
@@ -876,6 +1161,31 @@
                 </span>
             @endforeach
         </span>
+    </span>
+@elseif ($preview === 'gallery_single_masonry')
+    <span class="grid h-full grid-cols-4 gap-1.5">
+        @foreach ([['h-7 bg-emerald-100', 'h-11 bg-yellow-100', 'h-8 bg-sky-100'], ['h-12 bg-sky-100', 'h-9 bg-green-100'], ['h-8 bg-yellow-100', 'h-12 bg-emerald-100', 'h-7 bg-sky-100'], ['h-10 bg-green-100', 'h-9 bg-yellow-100']] as $column)
+            <span class="grid content-start gap-1.5">
+                @foreach ($column as $block)
+                    <span class="rounded-md {{ $block }} shadow-sm ring-1 ring-white/70"></span>
+                @endforeach
+            </span>
+        @endforeach
+    </span>
+@elseif ($preview === 'gallery_single_featured')
+    <span class="grid h-full grid-cols-[1.3fr_0.9fr] gap-2">
+        <span class="rounded-md bg-emerald-100 shadow-sm ring-1 ring-white/70"></span>
+        <span class="grid grid-cols-2 gap-1.5">
+            @foreach (['bg-yellow-100', 'bg-sky-100', 'bg-green-100', 'bg-emerald-100'] as $color)
+                <span class="rounded-md {{ $color }} shadow-sm ring-1 ring-white/70"></span>
+            @endforeach
+        </span>
+    </span>
+@elseif ($preview === 'gallery_single_grid')
+    <span class="grid h-full grid-cols-3 gap-1.5">
+        @foreach (['bg-emerald-100', 'bg-yellow-100', 'bg-sky-100', 'bg-green-100', 'bg-sky-100', 'bg-emerald-100', 'bg-green-100', 'bg-yellow-100', 'bg-sky-100'] as $color)
+            <span class="rounded-md {{ $color }} shadow-sm ring-1 ring-white/70"></span>
+        @endforeach
     </span>
 @elseif ($preview === 'photo_gallery_grid')
     <span class="grid h-full grid-cols-4 gap-1.5">
@@ -1113,6 +1423,76 @@
             @endforeach
         </span>
     </span>
+@elseif ($preview === 'post_single_classic')
+    <span class="grid h-full gap-2">
+        <span class="grid gap-1">
+            <span class="h-2.5 w-24 rounded bg-zinc-900"></span>
+            <span class="h-1.5 w-16 rounded bg-zinc-300"></span>
+        </span>
+        <span class="rounded-md bg-emerald-100 shadow-sm ring-1 ring-white/70"></span>
+        <span class="grid gap-1">
+            <span class="h-1.5 rounded bg-zinc-300"></span>
+            <span class="h-1.5 rounded bg-zinc-300"></span>
+            <span class="h-1.5 w-3/4 rounded bg-zinc-300"></span>
+        </span>
+    </span>
+@elseif ($preview === 'post_single_hero')
+    <span class="grid h-full gap-2">
+        <span class="grid justify-items-center gap-1 text-center">
+            <span class="h-3 w-28 rounded bg-zinc-900"></span>
+            <span class="h-2 w-20 rounded bg-zinc-900"></span>
+            <span class="h-1.5 w-16 rounded bg-zinc-300"></span>
+        </span>
+        <span class="rounded-md bg-emerald-100 shadow-sm ring-1 ring-white/70"></span>
+    </span>
+@elseif ($preview === 'post_single_compact')
+    <span class="mx-auto grid h-full max-w-[7.5rem] content-start gap-2">
+        <span class="grid gap-1">
+            <span class="h-2.5 rounded bg-zinc-900"></span>
+            <span class="h-1.5 w-2/3 rounded bg-zinc-300"></span>
+        </span>
+        <span class="rounded-md bg-emerald-100 shadow-sm ring-1 ring-white/70"></span>
+        <span class="grid gap-1">
+            <span class="h-1.5 rounded bg-zinc-300"></span>
+            <span class="h-1.5 rounded bg-zinc-300"></span>
+            <span class="h-1.5 w-4/5 rounded bg-zinc-300"></span>
+        </span>
+    </span>
+@elseif ($preview === 'post_single_cover')
+    <span class="grid h-full gap-2">
+        <span class="relative overflow-hidden rounded-md bg-emerald-100 shadow-sm ring-1 ring-white/70">
+            <span class="absolute inset-0 bg-gradient-to-t from-zinc-900/45 via-zinc-900/10 to-transparent"></span>
+            <span class="absolute inset-x-2 bottom-2 grid gap-1">
+                <span class="h-2.5 w-24 rounded bg-white"></span>
+                <span class="h-1.5 w-16 rounded bg-white/75"></span>
+            </span>
+        </span>
+        <span class="mx-auto grid w-4/5 gap-1">
+            <span class="h-1.5 rounded bg-zinc-300"></span>
+            <span class="h-1.5 rounded bg-zinc-300"></span>
+            <span class="h-1.5 w-3/4 rounded bg-zinc-300"></span>
+        </span>
+    </span>
+@elseif ($preview === 'post_single_sidebar')
+    <span class="grid h-full grid-cols-[1fr_0.42fr] gap-2">
+        <span class="grid content-start gap-2">
+            <span class="grid gap-1">
+                <span class="h-2.5 w-24 rounded bg-zinc-900"></span>
+                <span class="h-1.5 w-16 rounded bg-zinc-300"></span>
+            </span>
+            <span class="rounded-md bg-emerald-100 shadow-sm ring-1 ring-white/70"></span>
+            <span class="grid gap-1">
+                <span class="h-1.5 rounded bg-zinc-300"></span>
+                <span class="h-1.5 w-4/5 rounded bg-zinc-300"></span>
+            </span>
+        </span>
+        <span class="grid content-start gap-2 rounded-md bg-white p-2 shadow-sm ring-1 ring-pink-100">
+            <span class="h-1.5 w-10 rounded bg-zinc-900"></span>
+            <span class="h-1.5 rounded bg-emerald-100"></span>
+            <span class="h-1.5 rounded bg-yellow-100"></span>
+            <span class="h-1.5 rounded bg-sky-100"></span>
+        </span>
+    </span>
 @elseif ($preview === 'news_cards')
     <span class="grid h-full grid-cols-3 gap-2">
         @foreach (['bg-emerald-100', 'bg-yellow-100', 'bg-sky-100'] as $color)
@@ -1179,6 +1559,50 @@
             </span>
         @endforeach
     </span>
+@elseif ($preview === 'news_blog_grid')
+    <span class="grid h-full grid-cols-3 gap-2">
+        @foreach (['bg-emerald-100', 'bg-yellow-100', 'bg-sky-100'] as $color)
+            <span class="grid content-start gap-1.5">
+                <span class="block h-9 rounded-md {{ $color }} shadow-sm"></span>
+                <span class="block h-1 w-1/2 rounded bg-zinc-300"></span>
+                <span class="block h-1.5 rounded bg-zinc-900"></span>
+                <span class="block h-1.5 w-4/5 rounded bg-zinc-300"></span>
+                <span class="mt-1 flex items-center gap-1">
+                    <span class="size-3 rounded-full bg-pink-100"></span>
+                    <span class="h-1 w-7 rounded bg-zinc-300"></span>
+                </span>
+            </span>
+        @endforeach
+    </span>
+@elseif ($preview === 'news_image_cards')
+    <span class="grid h-full grid-cols-3 gap-2">
+        @foreach (['bg-emerald-100', 'bg-yellow-100', 'bg-sky-100'] as $color)
+            <span class="relative overflow-hidden rounded-md {{ $color }} shadow-sm">
+                <span class="absolute inset-x-1 bottom-1 grid gap-1 rounded bg-white/95 p-1 shadow-sm">
+                    <span class="h-1 w-1/2 rounded bg-zinc-300"></span>
+                    <span class="h-1.5 rounded bg-zinc-900"></span>
+                    <span class="h-1.5 w-4/5 rounded bg-zinc-300"></span>
+                </span>
+            </span>
+        @endforeach
+    </span>
+@elseif ($preview === 'news_editorial_list')
+    <span class="grid h-full gap-2">
+        @foreach (['bg-emerald-100', 'bg-yellow-100', 'bg-sky-100'] as $color)
+            <span class="grid grid-cols-[2.75rem_1fr] items-center gap-2">
+                <span class="aspect-square rounded-md {{ $color }} shadow-sm"></span>
+                <span class="grid gap-1">
+                    <span class="h-1 w-1/2 rounded bg-zinc-300"></span>
+                    <span class="h-1.5 rounded bg-zinc-900"></span>
+                    <span class="h-1.5 w-4/5 rounded bg-zinc-300"></span>
+                    <span class="mt-0.5 flex items-center gap-1">
+                        <span class="size-3 rounded-full bg-pink-100"></span>
+                        <span class="h-1 w-8 rounded bg-zinc-300"></span>
+                    </span>
+                </span>
+            </span>
+        @endforeach
+    </span>
 @elseif ($preview === 'about_split')
     <span class="grid h-full grid-cols-[1fr_0.85fr] gap-2">
         <span class="rounded-md bg-white p-3 shadow-sm">
@@ -1237,13 +1661,38 @@
         </span>
     </span>
 @elseif ($preview === 'about_letter')
-    <span class="grid h-full grid-cols-[0.9fr_1.1fr] gap-2">
+    <span class="grid h-full grid-cols-[0.9fr_1.1fr] items-center gap-2">
         <span class="rounded-md bg-green-100 shadow-sm"></span>
-        <span class="rounded-md bg-white p-3 shadow-sm">
-            <span class="mb-2 inline-flex size-4 rounded-full bg-sky-100"></span>
-            <span class="block h-2 rounded bg-zinc-900"></span>
+        <span class="self-center">
+            <span class="block rounded-md border-l-2 border-pink-200 bg-pink-50 p-2">
+                <span class="block h-1.5 rounded bg-zinc-900"></span>
+                <span class="mt-1.5 block h-1.5 w-4/5 rounded bg-zinc-300"></span>
+            </span>
             <span class="mt-2 block h-1.5 rounded bg-zinc-300"></span>
             <span class="mt-1.5 block h-1.5 w-5/6 rounded bg-zinc-300"></span>
+        </span>
+    </span>
+@elseif ($preview === 'about_editorial_frame')
+    <span class="grid h-full grid-rows-[1fr_auto] gap-2">
+        <span class="relative block min-h-0">
+            <span class="absolute inset-y-0 right-0 w-3/4 rounded-md bg-emerald-100">
+                <span class="absolute bottom-2 right-3 h-5 w-12 rounded bg-yellow-100"></span>
+                <span class="absolute right-5 top-2 size-5 rounded-full bg-sky-100"></span>
+            </span>
+            <span class="absolute left-0 top-1/2 w-[46%] -translate-y-1/2 rounded-md bg-pink-50 p-2 shadow-sm ring-1 ring-pink-100">
+                <span class="block h-2 rounded bg-zinc-900"></span>
+                <span class="mt-1.5 block h-2 w-4/5 rounded bg-zinc-900"></span>
+            </span>
+        </span>
+        <span class="mx-auto grid w-2/3 grid-cols-2 gap-3">
+            <span class="space-y-1">
+                <span class="block h-1.5 rounded bg-zinc-300"></span>
+                <span class="block h-1.5 w-4/5 rounded bg-zinc-300"></span>
+            </span>
+            <span class="space-y-1">
+                <span class="block h-1.5 rounded bg-zinc-300"></span>
+                <span class="block h-1.5 w-3/4 rounded bg-zinc-300"></span>
+            </span>
         </span>
     </span>
 @elseif ($preview === 'collaboration_banner')
@@ -1446,6 +1895,43 @@
                 </span>
             @endforeach
         </span>
+    </span>
+@elseif ($preview === 'testimonials_featured_mosaic')
+    <span class="grid h-full grid-cols-[1.35fr_0.9fr] gap-2">
+        <span class="rounded-md bg-white p-2.5 shadow-sm">
+            <span class="block h-2 rounded bg-zinc-900"></span>
+            <span class="mt-2 block h-1.5 rounded bg-zinc-300"></span>
+            <span class="mt-1.5 block h-1.5 w-4/5 rounded bg-zinc-300"></span>
+            <span class="mt-3 flex items-center gap-1.5">
+                <span class="size-5 rounded-full bg-emerald-100"></span>
+                <span class="h-1.5 w-14 rounded bg-zinc-900"></span>
+            </span>
+        </span>
+        <span class="grid gap-2">
+            @foreach (['bg-yellow-100', 'bg-sky-100'] as $color)
+                <span class="rounded-md bg-white p-2 shadow-sm">
+                    <span class="block h-1.5 rounded bg-zinc-300"></span>
+                    <span class="mt-1.5 block h-1.5 w-4/5 rounded bg-zinc-300"></span>
+                    <span class="mt-2 flex items-center gap-1.5">
+                        <span class="size-4 rounded-full {{ $color }}"></span>
+                        <span class="h-1.5 flex-1 rounded bg-zinc-900"></span>
+                    </span>
+                </span>
+            @endforeach
+        </span>
+    </span>
+@elseif ($preview === 'testimonials_masonry_columns')
+    <span class="grid h-full grid-cols-3 gap-2">
+        @foreach (['bg-emerald-100', 'bg-yellow-100', 'bg-sky-100'] as $color)
+            <span class="flex flex-col justify-between rounded-md bg-white p-2">
+                <span class="block h-1.5 rounded bg-zinc-300"></span>
+                <span class="mt-1.5 block h-1.5 w-4/5 rounded bg-zinc-300"></span>
+                <span class="mt-2 flex items-center gap-1">
+                    <span class="size-3 rounded-full {{ $color }}"></span>
+                    <span class="h-1 flex-1 rounded bg-zinc-900"></span>
+                </span>
+            </span>
+        @endforeach
     </span>
 @else
     <span class="grid h-full grid-cols-3 gap-2">

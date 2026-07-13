@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Schema;
 use IvanBaric\Corexis\Contracts\TenantResolver;
-use IvanBaric\Corexis\Data\ActionResult as CorexisActionResult;
+use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Pages\Actions\CreatePageAction;
 use IvanBaric\Pages\Actions\CreateSectionAction;
 use IvanBaric\Pages\Actions\CreateSectionItemAction;
@@ -18,7 +18,6 @@ use IvanBaric\Pages\Admin\AdminSectionRegistry;
 use IvanBaric\Pages\Admin\Field;
 use IvanBaric\Pages\Admin\LayoutVariant;
 use IvanBaric\Pages\Admin\Tab;
-use IvanBaric\Pages\Data\ActionResult;
 use IvanBaric\Pages\Events\PageCreated;
 use IvanBaric\Pages\Events\PagePublished;
 use IvanBaric\Pages\Events\PageSectionsReordered;
@@ -31,24 +30,10 @@ use IvanBaric\Pages\Models\Page;
 use IvanBaric\Pages\Models\Section;
 use IvanBaric\Pages\Models\SectionItem;
 
-class PagesTestTeamResolver
-{
-    public function resolve(): int
-    {
-        return 123;
-    }
-}
-
-class PagesTestSlugger
-{
-    public function generate(string $source): string
-    {
-        return str($source)->slug()->toString();
-    }
-}
-
 class PagesCorexisTenantResolverFake implements TenantResolver
 {
+    public static int $tenantId = 987;
+
     public function enabled(): bool
     {
         return true;
@@ -61,7 +46,7 @@ class PagesCorexisTenantResolverFake implements TenantResolver
 
     public function id(): int|string|null
     {
-        return 987;
+        return self::$tenantId;
     }
 
     public function uuid(): ?string
@@ -111,8 +96,8 @@ it('boots the package', function (): void {
 });
 
 it('loads config', function (): void {
-    expect(config('pages.templates.classic.label'))->toBe('Classic')
-        ->and(config('pages.section_types.hero.label'))->toBe('Hero');
+    expect(config('pages.templates.classic.label'))->toBe('Klasični')
+        ->and(config('pages.section_types.hero.label'))->toBe('Uvodni blok');
 });
 
 it('defines admin sections through the reusable fluent API', function (): void {
@@ -191,9 +176,7 @@ it('generates uuid', function (): void {
     expect($page->uuid)->toBeString()->not->toBeEmpty();
 });
 
-it('generates slug through the configured sanigen hook when available', function (): void {
-    config()->set('pages.slug.sanigen.generator', PagesTestSlugger::class);
-
+it('generates a normalized slug through corexis', function (): void {
     $page = Page::query()->create([
         'title' => ['en' => 'Sanigen Page'],
     ]);
@@ -201,24 +184,46 @@ it('generates slug through the configured sanigen hook when available', function
     expect($page->slug)->toBe('sanigen-page');
 });
 
-it('resolves team id', function (): void {
-    config()->set('pages.team_resolver', PagesTestTeamResolver::class);
-
-    $page = Page::query()->create([
-        'title' => ['en' => 'Team page'],
-    ]);
-
-    expect($page->team_id)->toBe(123);
-});
-
 it('resolves team id through corexis tenant resolver first', function (): void {
     app()->bind(TenantResolver::class, PagesCorexisTenantResolverFake::class);
+    PagesCorexisTenantResolverFake::$tenantId = 987;
 
     $page = Page::query()->create([
         'title' => ['en' => 'Corexis team page'],
     ]);
 
     expect($page->team_id)->toBe(987);
+});
+
+it('applies the corexis tenant scope and rejects cross-tenant model instances in actions', function (): void {
+    app()->bind(TenantResolver::class, PagesCorexisTenantResolverFake::class);
+
+    PagesCorexisTenantResolverFake::$tenantId = 10;
+    $page = Page::query()->create(['title' => ['en' => 'Tenant ten']]);
+
+    PagesCorexisTenantResolverFake::$tenantId = 20;
+    Page::query()->create(['title' => ['en' => 'Tenant twenty']]);
+
+    expect(Page::query()->count())->toBe(1)
+        ->and(Page::query()->first()?->localized('title'))->toBe('Tenant twenty');
+
+    $result = app(PublishPageAction::class)->handle($page);
+
+    expect($result->failed())->toBeTrue()
+        ->and($page->refresh()->isPublished())->toBeFalse();
+});
+
+it('does not accept team id from create action input', function (): void {
+    app()->bind(TenantResolver::class, PagesCorexisTenantResolverFake::class);
+    PagesCorexisTenantResolverFake::$tenantId = 987;
+
+    $result = app(CreatePageAction::class)->handle([
+        'team_id' => 123,
+        'title' => ['en' => 'Scoped action page'],
+    ]);
+
+    expect($result->success)->toBeTrue()
+        ->and($result->data->team_id)->toBe(987);
 });
 
 it('finds page by uuid', function (): void {
@@ -294,7 +299,7 @@ it('section item slugs stay unique when a previous item was soft deleted', funct
         'title' => ['en' => 'A'],
     ]);
 
-    expect($item->slug)->toBe('a-2');
+    expect($item->slug)->toBe('a-1');
 });
 
 it('sections are ordered', function (): void {
@@ -354,7 +359,7 @@ it('section type validation works', function (): void {
         'type' => 'invalid',
     ]);
 
-    expect($result->successful)->toBeFalse();
+    expect($result->success)->toBeFalse();
 });
 
 it('team scoping works', function (): void {
@@ -368,7 +373,7 @@ it('team scoping works', function (): void {
         'title' => ['en' => 'Team two'],
     ]);
 
-    expect(Page::query()->forTeam(1)->count())->toBe(1);
+    expect(Page::query()->forTenant(1)->count())->toBe(1);
 });
 
 it('action classes return action result', function (): void {
@@ -379,7 +384,7 @@ it('action classes return action result', function (): void {
     ]);
 
     expect($createPage)->toBeInstanceOf(ActionResult::class)
-        ->and($createPage->successful)->toBeTrue();
+        ->and($createPage->success)->toBeTrue();
 
     $publish = app(PublishPageAction::class)->handle($createPage->data->uuid);
     $unpublish = app(UnpublishPageAction::class)->handle($createPage->data->uuid);
@@ -396,15 +401,14 @@ it('action classes return action result', function (): void {
         ->and($reorderItems)->toBeInstanceOf(ActionResult::class);
 });
 
-it('pages action result can be converted to corexis action result', function (): void {
+it('uses the corexis action result directly', function (): void {
     $result = ActionResult::success(__('Saved.'), ['id' => 10], 'saved');
-    $corexis = $result->toCorexis();
 
-    expect($corexis)->toBeInstanceOf(CorexisActionResult::class)
-        ->and($corexis->success)->toBeTrue()
-        ->and($corexis->message)->toBe('Saved.')
-        ->and($corexis->data)->toBe(['id' => 10])
-        ->and($corexis->code)->toBe('saved');
+    expect($result)->toBeInstanceOf(ActionResult::class)
+        ->and($result->success)->toBeTrue()
+        ->and($result->message)->toBe('Saved.')
+        ->and($result->data)->toBe(['id' => 10])
+        ->and($result->code)->toBe('saved');
 });
 
 it('dispatches domain events for successful page actions only', function (): void {
@@ -414,7 +418,7 @@ it('dispatches domain events for successful page actions only', function (): voi
         'title' => null,
     ]);
 
-    expect($failed->successful)->toBeFalse();
+    expect($failed->success)->toBeFalse();
     Event::assertNotDispatched(PageCreated::class);
 
     $created = app(CreatePageAction::class)->handle([
@@ -423,12 +427,12 @@ it('dispatches domain events for successful page actions only', function (): voi
         'template' => 'classic',
     ]);
 
-    expect($created->successful)->toBeTrue();
+    expect($created->success)->toBeTrue();
     Event::assertDispatched(PageCreated::class);
 
     $published = app(PublishPageAction::class)->handle($created->data->uuid);
 
-    expect($published->successful)->toBeTrue();
+    expect($published->success)->toBeTrue();
     Event::assertDispatched(PagePublished::class);
 });
 
@@ -473,7 +477,7 @@ it('prevents stale page updates through lock version', function (): void {
         'lock_version' => 0,
     ]);
 
-    expect($result->successful)->toBeTrue()
+    expect($result->success)->toBeTrue()
         ->and($page->refresh()->lock_version)->toBe(1);
     Event::assertDispatched(PageUpdated::class);
 
@@ -485,7 +489,7 @@ it('prevents stale page updates through lock version', function (): void {
         'lock_version' => 0,
     ]);
 
-    expect($stale->successful)->toBeFalse()
+    expect($stale->success)->toBeFalse()
         ->and($stale->code)->toBe('conflict.stale_model')
         ->and($page->refresh()->title)->toBe(['en' => 'Updated']);
     Event::assertNotDispatched(PageUpdated::class);

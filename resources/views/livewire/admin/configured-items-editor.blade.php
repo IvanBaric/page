@@ -1,6 +1,6 @@
 <div class="space-y-6">
     <flux:tab.group>
-        <flux:tabs wire:model.live="tab" variant="segmented">
+        <flux:tabs wire:model.live="tab" variant="segmented" scrollable>
             @foreach ($this->editorTabs() as $editorTab)
                 <flux:tab :name="$editorTab['key']" :icon="$editorTab['icon']">{{ $editorTab['label'] }}</flux:tab>
             @endforeach
@@ -30,7 +30,8 @@
                         </div>
                     </div>
 
-                    <form wire:submit="saveSettings" class="space-y-6 p-6">
+                    <form wire:submit="saveSettings" wire:loading.class="admin-panel-content-loading" wire:target="saveSettings,saveAllChanges" class="relative min-w-0 space-y-6 p-4 sm:p-6">
+                        <x-admin-ui::loading-overlay target="saveSettings,saveAllChanges" :text="__('Spremanje...')" />
                         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                             @foreach ($this->layoutVariants() as $variant)
                                 @php
@@ -81,9 +82,11 @@
         @endif
 
         @if ($this->hasSettingsTab())
-            <flux:tab.panel :name="$this->settingsTabKey()" class="pt-6">
-                @include('pages::livewire.admin.partials.configured-settings-panel')
-            </flux:tab.panel>
+            @foreach ($this->settingsPanels() as $settingsPanel)
+                <flux:tab.panel :name="$settingsPanel['key']" class="pt-6">
+                    @include('pages::livewire.admin.partials.configured-settings-panel', ['settingsPanel' => $settingsPanel])
+                </flux:tab.panel>
+            @endforeach
         @endif
     </flux:tab.group>
 </div>

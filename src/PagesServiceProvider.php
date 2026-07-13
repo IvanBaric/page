@@ -2,6 +2,7 @@
 
 namespace IvanBaric\Pages;
 
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use IvanBaric\Pages\Admin\AdminSectionRegistry;
@@ -83,9 +84,10 @@ final class PagesServiceProvider extends ServiceProvider
     private function mergeConfigRecursivelyFrom(string $path, string $key): void
     {
         $defaults = require $path;
-        $configured = $this->app['config']->get($key, []);
+        $config = $this->app->make(Repository::class);
+        $configured = $config->get($key, []);
 
-        $this->app['config']->set($key, $this->mergeConfigValues($defaults, $configured, root: true));
+        $config->set($key, $this->mergeConfigValues($defaults, $configured, root: true));
     }
 
     /**

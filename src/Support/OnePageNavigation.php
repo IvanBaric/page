@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace IvanBaric\Pages\Support;
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -57,6 +58,31 @@ final class OnePageNavigation
         $suffix = is_string($uuid) && $uuid !== '' ? '-'.Str::lower(substr($uuid, 0, 8)) : '';
 
         return $slug.$suffix;
+    }
+
+    /** @return array<string, mixed> */
+    public function defaultSectionSettings(mixed $page, string $sectionKey): array
+    {
+        if (! (bool) data_get($page, 'is_home')) {
+            return [];
+        }
+
+        $settings = data_get(config('pages.one_page_navigation.home_section_defaults', []), $sectionKey, []);
+
+        if (! is_array($settings) || $settings === []) {
+            return [];
+        }
+
+        if (array_key_exists('label', $settings)) {
+            $settings['navigation_label'] = $settings['label'];
+            unset($settings['label']);
+        }
+
+        if (! array_key_exists('show_in_navigation', $settings)) {
+            $settings['show_in_navigation'] = true;
+        }
+
+        return $settings;
     }
 
     private function isVisibleInNavigation(mixed $section): bool
@@ -114,37 +140,62 @@ final class OnePageNavigation
         return $type !== '' ? (string) str($type)->headline() : '';
     }
 
+    /** @return Collection<int, mixed> */
     private function sectionsFor(mixed $homePage): Collection
     {
-        if (is_object($homePage) && method_exists($homePage, 'relationLoaded') && $homePage->relationLoaded('visibleSections')) {
-            return collect($homePage->getRelation('visibleSections'));
+        if ($homePage instanceof Model && $homePage->relationLoaded('visibleSections')) {
+            return $this->collectionFrom($homePage->getRelation('visibleSections'));
         }
 
         if (is_object($homePage) && method_exists($homePage, 'visibleSections')) {
             return $homePage->visibleSections()->get();
         }
 
-        return collect(data_get($homePage, 'visibleSections', data_get($homePage, 'sections', [])));
+        $sections = data_get($homePage, 'visibleSections', data_get($homePage, 'sections', []));
+
+        return $this->collectionFrom($sections);
     }
 
+    /** @return Collection<int, mixed> */
     private function visibleItemsFor(mixed $section): Collection
     {
-        if (is_object($section) && method_exists($section, 'relationLoaded') && $section->relationLoaded('visibleItems')) {
-            return collect($section->getRelation('visibleItems'));
+        if ($section instanceof Model && $section->relationLoaded('visibleItems')) {
+            return $this->collectionFrom($section->getRelation('visibleItems'));
         }
 
         if (is_object($section) && method_exists($section, 'visibleItems')) {
             return $section->visibleItems()->get();
         }
 
-        return collect(data_get($section, 'visibleItems', data_get($section, 'items', [])));
+        $items = data_get($section, 'visibleItems', data_get($section, 'items', []));
+
+        return $this->collectionFrom($items);
     }
 
+    /** @return Collection<int, mixed> */
     private function pages(mixed $publicPages): Collection
     {
         return $publicPages instanceof Collection
             ? $publicPages->values()
-            : collect($publicPages)->values();
+            : $this->collectionFrom($publicPages);
+    }
+
+    /** @return Collection<int, mixed> */
+    private function collectionFrom(mixed $value): Collection
+    {
+        if ($value instanceof Collection) {
+            return $value->values();
+        }
+
+        if (is_array($value)) {
+            return new Collection(array_values($value));
+        }
+
+        if ($value instanceof \Traversable) {
+            return new Collection(iterator_to_array($value, false));
+        }
+
+        return new Collection;
     }
 
     private function normalizeBaseUrl(string $homeUrl): string

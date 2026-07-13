@@ -8,7 +8,9 @@
             {{ __('Back') }}
         </flux:button>
     </div>
-    <form wire:submit="save" class="space-y-12">
+    <form wire:submit="save" wire:loading.class="admin-panel-content-loading" wire:target="save" class="relative space-y-12">
+        <x-admin-ui::loading-overlay target="save" :text="__('Spremanje...')" />
+
         <div class="grid gap-6 md:grid-cols-2">
             <flux:input wire:model="title.{{ $locale }}" :label="__('Title')" type="text" />
             <flux:input wire:model="icon" :label="__('Icon')" type="text" />
@@ -18,9 +20,9 @@
             <flux:checkbox wire:model="is_visible" :label="__('Visible')" />
         </div>
         <div class="flex items-center gap-3">
-            <flux:button variant="primary" type="submit">
+            <x-admin-ui::submit-button target="save">
                 {{ $editingUuid ? __('Update item') : __('Add item') }}
-            </flux:button>
+            </x-admin-ui::submit-button>
         </div>
     </form>
     <flux:table>
