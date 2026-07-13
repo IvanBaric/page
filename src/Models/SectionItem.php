@@ -17,6 +17,7 @@ use IvanBaric\Pages\Support\PagesModels;
 
 /**
  * @property int $id
+ * @property int $section_id
  * @property int|null $team_id
  * @property string $uuid
  * @property string $slug
