@@ -1016,3 +1016,53 @@ it('prevents stale page updates through lock version', function (): void {
         ->and($page->refresh()->title)->toBe(['en' => 'Updated']);
     Event::assertNotDispatched(PageUpdated::class);
 });
+
+it('preserves translations from other locales during partial updates', function (): void {
+    config()->set('pages.translatable.default_locale', 'de');
+    config()->set('app.locale', 'de');
+
+    $page = Page::query()->create([
+        'title' => ['en' => 'Guide', 'hr' => 'Vodič'],
+        'status' => 'draft',
+    ]);
+    $section = $page->addSection('hero', [
+        'title' => ['en' => 'Welcome'],
+        'description' => ['en' => 'English description', 'de' => 'Alte Beschreibung'],
+    ]);
+    $item = $section->addItem([
+        'title' => ['en' => 'Restaurant'],
+        'description' => ['en' => 'English details'],
+    ]);
+
+    $pageResult = app(UpdatePageAction::class)->handle($page, [
+        'title' => ['de' => 'Reiseführer'],
+        'status' => 'draft',
+    ]);
+    $sectionResult = app(UpdateSectionAction::class)->handle($section, [
+        'type' => 'hero',
+        'title' => ['de' => 'Willkommen'],
+        'description' => null,
+    ]);
+    $itemResult = app(UpdateSectionItemAction::class)->handle($item, [
+        'title' => ['de' => 'Restaurant'],
+        'description' => ['de' => 'Deutsche Details'],
+    ]);
+
+    expect($pageResult->success)->toBeTrue()
+        ->and($page->refresh()->title)->toBe([
+            'en' => 'Guide',
+            'hr' => 'Vodič',
+            'de' => 'Reiseführer',
+        ])
+        ->and($sectionResult->success)->toBeTrue()
+        ->and($section->refresh()->title)->toBe([
+            'en' => 'Welcome',
+            'de' => 'Willkommen',
+        ])
+        ->and($section->description)->toBe(['en' => 'English description'])
+        ->and($itemResult->success)->toBeTrue()
+        ->and($item->refresh()->description)->toBe([
+            'en' => 'English details',
+            'de' => 'Deutsche Details',
+        ]);
+});

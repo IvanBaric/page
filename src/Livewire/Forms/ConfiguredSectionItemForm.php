@@ -242,12 +242,12 @@ final class ConfiguredSectionItemForm extends Form
 
         return [
             'title' => [''.$locale => $validated['title']],
-            'subtitle' => filled($validated['subtitle']) ? [''.$locale => $validated['subtitle']] : null,
-            'content' => filled($validated['content']) ? [''.$locale => $validated['content']] : null,
-            'description' => filled($validated['content']) ? [''.$locale => $validated['content']] : null,
+            'subtitle' => [''.$locale => trim((string) ($validated['subtitle'] ?? ''))],
+            'content' => [''.$locale => trim((string) ($validated['content'] ?? ''))],
+            'description' => [''.$locale => trim((string) ($validated['content'] ?? ''))],
             'icon' => $validated['icon'],
             'url' => $youtubeData !== null ? $youtubeData['youtube_url'] : $validated['url'],
-            'button_text' => filled($validated['buttonLabel']) ? [''.$locale => $validated['buttonLabel']] : null,
+            'button_text' => [''.$locale => trim((string) ($validated['buttonLabel'] ?? ''))],
             'button_url' => $validated['buttonUrl'],
             '_image_upload' => $validated['imageUpload'] ?? null,
             '_remove_image' => (bool) ($validated['removeImage'] ?? false),

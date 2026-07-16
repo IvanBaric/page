@@ -334,6 +334,8 @@ Actions return `IvanBaric\Corexis\Data\ActionResult` directly and avoid UI excep
 
 The write API covers create, update, publish/unpublish, archive/delete, copy, move, reorder and visibility changes for pages, sections and section items. `ToggleSectionVisibilityAction` and `ToggleSectionItemVisibilityAction` own visibility transitions; Livewire components do not save these models directly.
 
+Partial updates of translated page, section and section-item attributes merge the submitted locale into the existing translation map. Clearing a translated field removes only the active locale, so editing English, Croatian, German or Italian content cannot erase translations already entered in another locale.
+
 Archived records use `RestoreArchivedRecordAction` and `ForceDeleteArchivedRecordAction`. Both accept only the supported record type and UUID, resolve trashed records through `PagesModels`, authorize the resolved model and perform the write in a transaction. Browser-provided model ids or classes are never trusted.
 
 `Page::publish()`, `Page::unpublish()` and each model's `archive()` method contain the state mutation itself. Actions remain the required boundary for user-driven writes because they add authorization, tenant-safe resolution, locking and domain events.

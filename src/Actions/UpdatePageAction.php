@@ -12,13 +12,14 @@ use Illuminate\Validation\Rule;
 use IvanBaric\Corexis\Concerns\UsesOptimisticLocking;
 use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
+use IvanBaric\Pages\Actions\Concerns\MergesTranslatableAttributes;
 use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
 use IvanBaric\Pages\Events\PageUpdated;
 use IvanBaric\Pages\Models\Page;
 
 final class UpdatePageAction
 {
-    use AuthorizesPageActions, ResolvesPageModels, UsesOptimisticLocking;
+    use AuthorizesPageActions, MergesTranslatableAttributes, ResolvesPageModels, UsesOptimisticLocking;
 
     /**
      * @param  array<string, mixed>  $data
@@ -41,7 +42,11 @@ final class UpdatePageAction
             return ActionResult::error(__('Stranicu nije moguće ažurirati.'), errors: $validator->errors()->toArray());
         }
 
-        $data = $validator->validated();
+        $data = $this->mergeTranslatableAttributes(
+            $page,
+            $validator->validated(),
+            ['title', 'excerpt', 'content'],
+        );
         $expectedLockVersion = $this->pullExpectedLockVersion($data);
         $originalParentId = $page->parent_id;
         $parentChanged = false;

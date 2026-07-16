@@ -11,13 +11,14 @@ use IvanBaric\Corexis\Concerns\UsesOptimisticLocking;
 use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Corexis\Rules\SafePublicUrl;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
+use IvanBaric\Pages\Actions\Concerns\MergesTranslatableAttributes;
 use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
 use IvanBaric\Pages\Events\SectionUpdated;
 use IvanBaric\Pages\Models\Section;
 
 final class UpdateSectionAction
 {
-    use AuthorizesPageActions, ResolvesPageModels, UsesOptimisticLocking;
+    use AuthorizesPageActions, MergesTranslatableAttributes, ResolvesPageModels, UsesOptimisticLocking;
 
     /**
      * @param  array<string, mixed>  $data
@@ -40,7 +41,11 @@ final class UpdateSectionAction
             return ActionResult::error(__('Sekciju nije moguće ažurirati.'), errors: $validator->errors()->toArray());
         }
 
-        $validated = $validator->validated();
+        $validated = $this->mergeTranslatableAttributes(
+            $section,
+            $validator->validated(),
+            ['title', 'subtitle', 'description', 'content', 'button_text'],
+        );
         $expectedLockVersion = $this->pullExpectedLockVersion($validated);
 
         $saved = DB::transaction(function () use ($section, $validated, $expectedLockVersion): bool {

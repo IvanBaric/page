@@ -327,7 +327,7 @@ class ConfiguredItemsEditor extends Component
 
         $data = [
             'title' => [$locale => trim((string) $validated['sectionTitle'])],
-            'description' => filled($validated['sectionDescription']) ? [$locale => trim((string) $validated['sectionDescription'])] : null,
+            'description' => [$locale => trim((string) ($validated['sectionDescription'] ?? ''))],
             'settings' => $settings,
         ];
         $result = $this->executeConfiguredAction('save_section', [$this->section, [
