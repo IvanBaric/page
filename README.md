@@ -143,6 +143,32 @@ Pages provides a reusable public page pipeline in addition to the admin and publ
 - `PublicPageViewTracker` is an optional adapter contract; the default implementation does nothing.
 - `pages::public-site.page` renders the page through Template Engine and mounts editors only for an authorized actor from the same tenant.
 
+### Public section creator
+
+The default public page view includes the `Dodaj sekciju` control and its Livewire workflow. Pages owns authorization, tenant-safe writes, the selection modal and `CreateSectionAction`; Template Engine owns the active template's section allowlist.
+
+A concrete template package only needs to register its sections:
+
+```php
+'templates' => [
+    'business' => [
+        'sections' => [
+            'services' => [
+                'label' => 'Services',
+                'component' => ServicesSection::class,
+                'metadata' => [
+                    'icon' => 'briefcase',
+                ],
+            ],
+        ],
+    ],
+],
+```
+
+Disabled sections, sections with `metadata.creatable = false`, and internal `template_*` definitions are rejected by `CreateSectionAction`, so a crafted Livewire request cannot create a section unsupported by the page's active template. Structural types listed in `pages.section_creator.exclude_types`, including `hero` by default, remain available to installers and onboarding Actions but are not offered in the public creator.
+
+`pages.section_types` remains an optional host override for labels, icons and backwards compatibility. Use `pages.section_creator.groups` to group related section types in the selector and `pages.section_creator.exclude_types` for additional non-creatable structural sections. A new template package does not need to duplicate its complete section list in Pages configuration.
+
 Public routes are disabled by default because the page route is commonly a final catch-all route. Enable package route registration or connect the controller manually after content-specific routes:
 
 ```php

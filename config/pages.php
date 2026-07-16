@@ -45,6 +45,11 @@ return [
         'custom' => ['label' => 'Prilagođeno'],
     ],
 
+    'section_creator' => [
+        'exclude_types' => ['hero'],
+        'groups' => [],
+    ],
+
     'admin_section_definitions' => [],
 
     'admin_sections' => [],

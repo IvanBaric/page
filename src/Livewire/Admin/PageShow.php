@@ -23,6 +23,7 @@ use IvanBaric\Pages\Admin\Tab;
 use IvanBaric\Pages\Livewire\Forms\SectionSettingsForm;
 use IvanBaric\Pages\Models\Page;
 use IvanBaric\Pages\Models\Section;
+use IvanBaric\Pages\Support\AvailableSectionTypes;
 use IvanBaric\Pages\Support\OnePageNavigation;
 use IvanBaric\Pages\Support\PagesModels;
 use Livewire\Attributes\Computed;
@@ -643,7 +644,8 @@ class PageShow extends Component
                 'panel_description' => (string) $entry['description'],
                 'icon' => (string) $entry['icon'],
                 'sections' => collect((array) $entry['types'])
-                    ->reject(fn (string $type): bool => $this->isHiddenInSectionCreator($type))
+                    ->filter(fn (string $type): bool => $this->isAvailableSectionType($type)
+                        && ! $this->isHiddenInSectionCreator($type))
                     ->map(fn (string $type): array => $this->sectionCreatorDetailsForType($type))
                     ->filter()
                     ->values()
@@ -749,14 +751,7 @@ class PageShow extends Component
     /** @return array<string, array<string, mixed>> */
     private function sectionTypeOptions(): array
     {
-        return array_filter(
-            (array) config('pages.section_types', []),
-            static fn (mixed $config, mixed $key): bool => is_string($key)
-                && is_array($config)
-                && $key !== 'hero'
-                && ! str_starts_with($key, 'template_'),
-            ARRAY_FILTER_USE_BOTH,
-        );
+        return app(AvailableSectionTypes::class)->forPage($this->page);
     }
 
     private function firstAvailableSectionType(): string
@@ -792,26 +787,24 @@ class PageShow extends Component
     /** @return array<string, array{label: string, description: string, icon: string, types: array<int, string>}> */
     private function sectionCreatorGroups(): array
     {
-        return [
-            'products' => [
-                'label' => __('Radovi'),
-                'description' => __('Jedna prilagodljiva sekcija radova s filtrom te upute kako naručiti ili preuzeti učeničke rukotvorine.'),
-                'icon' => 'cube',
-                'types' => ['all_products', 'how_to_order'],
-            ],
-            'galleries' => [
-                'label' => __('Galerije'),
-                'description' => __('Jedna galerijska sekcija za postojeće albume ili fotografije učitane izravno na stranicu.'),
-                'icon' => 'photo',
-                'types' => ['gallery_grid'],
-            ],
-            'news' => [
-                'label' => __('Objave'),
-                'description' => __('Jedna sekcija objava za sve, istaknute ili tematski filtrirane objave.'),
-                'icon' => 'newspaper',
-                'types' => ['latest_news'],
-            ],
-        ];
+        $availableTypes = array_keys($this->sectionTypeOptions());
+
+        return collect((array) config('pages.section_creator.groups', []))
+            ->filter(static fn (mixed $group, mixed $key): bool => is_string($key)
+                && is_array($group)
+                && is_array($group['types'] ?? null))
+            ->map(static fn (array $group): array => [
+                'label' => __((string) ($group['label'] ?? '')),
+                'description' => __((string) ($group['description'] ?? '')),
+                'icon' => (string) ($group['icon'] ?? 'rectangle-stack'),
+                'types' => array_values(array_filter(
+                    $group['types'],
+                    static fn (mixed $type): bool => is_string($type)
+                        && in_array($type, $availableTypes, true),
+                )),
+            ])
+            ->filter(static fn (array $group): bool => $group['types'] !== [])
+            ->all();
     }
 
     /** @param array<string, array{types: array<int, string>}> $groups */
@@ -834,7 +827,7 @@ class PageShow extends Component
             return (string) $registryLabel;
         }
 
-        return (string) data_get(config('pages.section_types'), $type.'.label', str($type)->headline());
+        return __((string) data_get($this->sectionTypeOptions(), $type.'.label', str($type)->headline()));
     }
 
     private function initialSectionTitle(string $type): string
@@ -980,6 +973,12 @@ class PageShow extends Component
 
     private function sectionTypeIcon(string $type): string
     {
+        $configuredIcon = data_get($this->sectionTypeOptions(), $type.'.icon');
+
+        if (is_string($configuredIcon) && $configuredIcon !== '') {
+            return $configuredIcon;
+        }
+
         return match ($type) {
             'hero' => 'rectangle-stack',
             'about', 'mission', 'vision', 'values' => 'document-text',

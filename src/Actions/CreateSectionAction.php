@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace IvanBaric\Pages\Actions;
 
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Corexis\Rules\SafePublicUrl;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
 use IvanBaric\Pages\Events\SectionCreated;
 use IvanBaric\Pages\Models\Page;
+use IvanBaric\Pages\Support\AvailableSectionTypes;
 
 final class CreateSectionAction
 {
@@ -32,7 +32,7 @@ final class CreateSectionAction
             return $result;
         }
 
-        $validator = Validator::make($data, $this->rules(), attributes: $this->attributes());
+        $validator = Validator::make($data, $this->rules($page), attributes: $this->attributes());
 
         if ($validator->fails()) {
             return ActionResult::error(__('Sekciju nije moguće izraditi.'), errors: $validator->errors()->toArray());
@@ -49,10 +49,18 @@ final class CreateSectionAction
     /**
      * @return array<string, mixed>
      */
-    private function rules(): array
+    private function rules(Page $page): array
     {
         return [
-            'type' => ['required', 'string', Rule::in(array_keys(config('pages.section_types', [])))],
+            'type' => [
+                'required',
+                'string',
+                function (string $attribute, mixed $value, \Closure $fail) use ($page): void {
+                    if (! is_string($value) || ! app(AvailableSectionTypes::class)->contains($page, $value)) {
+                        $fail(__('Odabrana vrsta sekcije nije dostupna za aktivni predložak.'));
+                    }
+                },
+            ],
             'title' => ['nullable', 'array'],
             'subtitle' => ['nullable', 'array'],
             'description' => ['nullable', 'array'],

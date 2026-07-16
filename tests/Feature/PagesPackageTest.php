@@ -43,12 +43,15 @@ use IvanBaric\Pages\Http\Controllers\PublicContentController;
 use IvanBaric\Pages\Models\Page;
 use IvanBaric\Pages\Models\Section;
 use IvanBaric\Pages\Models\SectionItem;
+use IvanBaric\Pages\Support\AvailableSectionTypes;
 use IvanBaric\Pages\Support\CurrentPublicSite;
 use IvanBaric\Pages\Support\EloquentPublicSiteSubjectResolver;
 use IvanBaric\Pages\Support\PublicManagementRegistry;
 use IvanBaric\Pages\Support\PublicSitePageResolver;
 use IvanBaric\Pages\Support\PublicSiteUrl;
 use IvanBaric\Pages\Support\YouTubeVideo;
+use IvanBaric\TemplateEngine\Contracts\TemplateEngineContract;
+use IvanBaric\TemplateEngine\Contracts\TemplateRegistryContract;
 
 class PagesCorexisTenantResolverFake implements TenantResolver
 {
@@ -787,6 +790,47 @@ it('section type validation works', function (): void {
     ]);
 
     expect($result->success)->toBeFalse();
+});
+
+it('uses the active template as the public section creator allowlist', function (): void {
+    config()->set('pages.section_types', [
+        'services' => ['label' => 'Usluge iz host aplikacije'],
+        'legacy' => ['label' => 'Stara sekcija'],
+    ]);
+    config()->set('template_engine.default_template', 'business');
+    config()->set('template_engine.templates', [
+        'business' => [
+            'sections' => [
+                'hero' => ['label' => 'Hero'],
+                'services' => [
+                    'label' => 'Services',
+                    'metadata' => ['icon' => 'briefcase'],
+                ],
+                'private_notes' => [
+                    'label' => 'Private notes',
+                    'metadata' => ['creatable' => false],
+                ],
+            ],
+        ],
+    ]);
+
+    app()->forgetInstance(TemplateRegistryContract::class);
+    app()->forgetInstance(TemplateEngineContract::class);
+    app()->forgetInstance('template-engine');
+    app()->forgetInstance(AvailableSectionTypes::class);
+
+    $page = Page::query()->create([
+        'title' => ['en' => 'Business page'],
+        'template' => 'business',
+    ]);
+    $available = app(AvailableSectionTypes::class)->forPage($page);
+
+    expect(array_keys($available))->toBe(['services'])
+        ->and($available['services']['label'])->toBe('Usluge iz host aplikacije')
+        ->and($available['services']['icon'])->toBe('briefcase')
+        ->and(app(CreateSectionAction::class)->handle($page, ['type' => 'services'])->success)->toBeTrue()
+        ->and(app(CreateSectionAction::class)->handle($page, ['type' => 'legacy'])->success)->toBeFalse()
+        ->and(app(CreateSectionAction::class)->handle($page, ['type' => 'private_notes'])->success)->toBeFalse();
 });
 
 it('rejects unsafe section and item links', function (): void {
