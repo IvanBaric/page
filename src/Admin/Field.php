@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace IvanBaric\Pages\Admin;
 
+use IvanBaric\Corexis\Rules\SafePublicUrl;
+use IvanBaric\Pages\Admin\Contracts\FieldOptionsProvider;
+
 final class Field
 {
     /** @var array<int, mixed> */
@@ -52,6 +55,11 @@ final class Field
         return new self($key, 'select');
     }
 
+    public static function checkboxList(string $key): self
+    {
+        return new self($key, 'checkbox_list', rules: ['array', 'max:100']);
+    }
+
     public static function toggle(string $key): self
     {
         return new self($key, 'boolean', rules: ['boolean']);
@@ -79,7 +87,7 @@ final class Field
 
     public static function url(string $key): self
     {
-        return new self($key, 'url', rules: ['nullable', 'url']);
+        return new self($key, 'url', rules: ['nullable', 'string', new SafePublicUrl]);
     }
 
     public static function icon(string $key): self
@@ -156,6 +164,12 @@ final class Field
         return $this->option('options', $options);
     }
 
+    /** @param class-string<FieldOptionsProvider> $provider */
+    public function optionsProvider(string $provider): self
+    {
+        return $this->option('options_provider', $provider);
+    }
+
     public function default(mixed $value): self
     {
         return $this->option('default', $value);
@@ -171,6 +185,14 @@ final class Field
         return $this->option('storage', $path);
     }
 
+    public function visibleWhen(string $field, mixed $value): self
+    {
+        return $this->option('visible_when', [
+            'field' => $field,
+            'value' => $value,
+        ]);
+    }
+
     public function mediaCollection(string $collection): self
     {
         return $this->option('media_collection', $collection);
@@ -181,7 +203,7 @@ final class Field
         return $this->option('store_as_gallery_media', $store);
     }
 
-    /** @param array<int, string> $rules */
+    /** @param array<int, mixed> $rules */
     public function rules(array $rules): self
     {
         $this->rules = array_values($rules);
@@ -189,7 +211,7 @@ final class Field
         return $this;
     }
 
-    public function rule(string $rule): self
+    public function rule(mixed $rule): self
     {
         $this->rules[] = $rule;
 
@@ -218,7 +240,7 @@ final class Field
         return $this->label;
     }
 
-    /** @return array<int, string> */
+    /** @return array<int, mixed> */
     public function rulesValue(): array
     {
         return $this->rules;
@@ -246,7 +268,7 @@ final class Field
     {
         $this->rules = array_values(array_filter(
             $this->rules,
-            static fn (string $rule): bool => ! in_array($rule, $rules, true),
+            static fn (mixed $rule): bool => ! is_string($rule) || ! in_array($rule, $rules, true),
         ));
     }
 
@@ -254,7 +276,7 @@ final class Field
     {
         $this->rules = array_values(array_filter(
             $this->rules,
-            static fn (string $rule): bool => ! str_starts_with($rule, $prefix),
+            static fn (mixed $rule): bool => ! is_string($rule) || ! str_starts_with($rule, $prefix),
         ));
     }
 

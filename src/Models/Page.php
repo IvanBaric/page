@@ -5,6 +5,7 @@ namespace IvanBaric\Pages\Models;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
@@ -18,6 +19,7 @@ use IvanBaric\Pages\Support\PagesModels;
 /**
  * @property int $id
  * @property int|null $team_id
+ * @property int|null $parent_id
  * @property string $uuid
  * @property string $slug
  * @property string|null $page_key
@@ -55,6 +57,8 @@ class Page extends Model
                 return;
             }
 
+            $page->parent_id = null;
+
             $query = $page->newQueryWithoutRelationships()
                 ->withoutGlobalScopes()
                 ->where('team_id', $page->team_id)
@@ -77,6 +81,7 @@ class Page extends Model
             'title' => 'array',
             'excerpt' => 'array',
             'content' => 'array',
+            'parent_id' => 'integer',
             'is_home' => 'boolean',
             'is_published' => 'boolean',
             'published_at' => 'datetime',
@@ -90,6 +95,18 @@ class Page extends Model
     public function sections(): HasMany
     {
         return $this->hasMany(PagesModels::section());
+    }
+
+    /** @return BelongsTo<Page, $this> */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(PagesModels::page(), 'parent_id');
+    }
+
+    /** @return HasMany<Page, $this> */
+    public function children(): HasMany
+    {
+        return $this->hasMany(PagesModels::page(), 'parent_id')->ordered();
     }
 
     /** @return HasMany<Section, $this> */
@@ -126,6 +143,16 @@ class Page extends Model
     protected function ordered(Builder $query): void
     {
         $query->orderBy('sort_order')->orderBy('title')->orderByDesc('created_at');
+    }
+
+    /** @param Builder<Page> $query */
+    #[Scope]
+    protected function navigationVisible(Builder $query): void
+    {
+        $query->where(function (Builder $query): void {
+            $query->whereNull('parent_id')
+                ->orWhereHas('parent', fn (Builder $parent): Builder => $parent->published());
+        });
     }
 
     /** @param Builder<Page> $query */

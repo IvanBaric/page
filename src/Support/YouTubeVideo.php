@@ -41,19 +41,19 @@ final class YouTubeVideo
         $path = trim((string) ($parts['path'] ?? ''), '/');
         $query = (string) ($parts['query'] ?? '');
 
-        if ($query !== '') {
-            parse_str($query, $queryParameters);
-
-            if (isset($queryParameters['v']) && is_string($queryParameters['v'])) {
-                return self::normalizeVideoId($queryParameters['v']);
-            }
-        }
-
-        if (str_contains($host, 'youtu.be')) {
+        if (self::matchesHost($host, 'youtu.be')) {
             return self::normalizeVideoId(strtok($path, '/') ?: $path);
         }
 
-        if (str_contains($host, 'youtube.com')) {
+        if (self::matchesHost($host, 'youtube.com')) {
+            if ($query !== '') {
+                parse_str($query, $queryParameters);
+
+                if (isset($queryParameters['v']) && is_string($queryParameters['v'])) {
+                    return self::normalizeVideoId($queryParameters['v']);
+                }
+            }
+
             $segments = array_values(array_filter(explode('/', $path)));
             $knownPrefixes = ['embed', 'shorts', 'live', 'v'];
 
@@ -63,6 +63,11 @@ final class YouTubeVideo
         }
 
         return null;
+    }
+
+    private static function matchesHost(string $host, string $domain): bool
+    {
+        return $host === $domain || str_ends_with($host, '.'.$domain);
     }
 
     private static function normalizeVideoId(string $value): ?string

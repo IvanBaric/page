@@ -16,12 +16,14 @@
             <flux:button
                 type="button"
                 variant="primary"
-                icon="check"
                 x-on:click="saving = true"
                 x-bind:disabled="saving"
                 wire:click="$dispatch('pages-save-section-editor')"
             >
-                <span x-show="! saving">{{ __('Spremi promjene') }}</span>
+                <span x-show="! saving" class="inline-flex items-center gap-2">
+                    <flux:icon name="check" class="size-4 shrink-0" />
+                    <span>{{ __('Spremi promjene') }}</span>
+                </span>
                 <span x-cloak x-show="saving" class="inline-flex items-center gap-2">
                     <span class="admin-submit-spinner" aria-hidden="true"></span>
                     <span>{{ __('Spremanje...') }}</span>

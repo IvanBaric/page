@@ -44,7 +44,11 @@ class PageIndex extends Component
 
     public string $pageExcerpt = '';
 
+    public ?string $pageParentUuid = null;
+
     public string $newPageTitle = '';
+
+    public ?string $newPageParentUuid = null;
 
     #[Locked]
     public ?string $deletingPageUuid = null;
@@ -95,30 +99,31 @@ class PageIndex extends Component
 
     public function openCreatePage(): void
     {
-        $this->reset('newPageTitle');
+        $this->reset('newPageTitle', 'newPageParentUuid');
         Flux::modal('page-create-form')->show();
     }
 
     public function cancelCreatePage(): void
     {
-        $this->reset('newPageTitle');
+        $this->reset('newPageTitle', 'newPageParentUuid');
     }
 
     public function editPage(string $uuid): void
     {
         $page = $this->editablePage($uuid);
 
-        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt');
+        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt', 'pageParentUuid');
         $this->editingPageUuid = $page->uuid;
         $this->pageTitle = $page->localized('title');
         $this->pageExcerpt = $page->localized('excerpt') ?: $page->localized('content');
+        $this->pageParentUuid = $page->parent?->uuid;
 
         Flux::modal('page-title-form')->show();
     }
 
     public function cancelPageTitleForm(): void
     {
-        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt');
+        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt', 'pageParentUuid');
     }
 
     public function savePage(UpdatePageAction $action): void
@@ -126,9 +131,11 @@ class PageIndex extends Component
         $validated = $this->validate([
             'pageTitle' => ['required', 'string', 'max:120'],
             'pageExcerpt' => ['nullable', 'string', 'max:500'],
+            'pageParentUuid' => ['nullable', 'uuid'],
         ], [], [
             'pageTitle' => __('naziv stranice'),
             'pageExcerpt' => __('kratki opis'),
+            'pageParentUuid' => __('nadređena stranica'),
         ]);
 
         if (! $this->editingPageUuid) {
@@ -151,6 +158,7 @@ class PageIndex extends Component
             'sort_order' => (int) $page->getAttribute('sort_order'),
             'settings' => $page->getAttribute('settings'),
             'lock_version' => (int) $page->getAttribute('lock_version'),
+            'parent_uuid' => filled($validated['pageParentUuid'] ?? null) ? (string) $validated['pageParentUuid'] : null,
         ]);
 
         if ($result->failed()) {
@@ -159,7 +167,7 @@ class PageIndex extends Component
             return;
         }
 
-        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt');
+        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt', 'pageParentUuid');
         unset($this->pages);
 
         Flux::modal('page-title-form')->close();
@@ -170,8 +178,10 @@ class PageIndex extends Component
     {
         $validated = $this->validate([
             'newPageTitle' => ['required', 'string', 'max:120'],
+            'newPageParentUuid' => ['nullable', 'uuid'],
         ], [], [
             'newPageTitle' => __('naziv stranice'),
+            'newPageParentUuid' => __('nadređena stranica'),
         ]);
 
         $model = PagesModels::page();
@@ -188,6 +198,7 @@ class PageIndex extends Component
             'is_published' => true,
             'published_at' => now(),
             'sort_order' => ((int) $model::query()->max('sort_order')) + 1,
+            'parent_uuid' => filled($validated['newPageParentUuid'] ?? null) ? (string) $validated['newPageParentUuid'] : null,
         ]);
 
         if ($result->failed() || ! $result->data instanceof Page) {
@@ -198,7 +209,7 @@ class PageIndex extends Component
 
         $page = $result->data;
 
-        $this->reset('newPageTitle');
+        $this->reset('newPageTitle', 'newPageParentUuid');
         unset($this->pages, $this->stats);
 
         Flux::modal('page-create-form')->close();
@@ -264,6 +275,7 @@ class PageIndex extends Component
         return $model::query()
             ->tap(fn (Builder $query): Builder => $this->adminPagesQuery($query))
             ->withCount('sections')
+            ->with('parent:id,uuid,title')
             ->when($this->search !== '', function (Builder $query): void {
                 $search = trim($this->search);
 
@@ -365,8 +377,29 @@ class PageIndex extends Component
 
         return $model::query()
             ->published()
+            ->navigationVisible()
             ->ordered()
             ->get();
+    }
+
+    /** @return array<int, array{uuid: string, label: string}> */
+    #[Computed]
+    public function parentPageOptions(): array
+    {
+        $model = PagesModels::page();
+
+        return $model::query()
+            ->tap(fn (Builder $query): Builder => $this->adminPagesQuery($query))
+            ->whereNull('parent_id')
+            ->where('is_home', false)
+            ->when($this->editingPageUuid, fn (Builder $query): Builder => $query->where('uuid', '!=', $this->editingPageUuid))
+            ->ordered()
+            ->get()
+            ->map(fn (Page $page): array => [
+                'uuid' => (string) $page->uuid,
+                'label' => $page->localized('title') ?: (string) $page->slug,
+            ])
+            ->all();
     }
 
     #[Computed]

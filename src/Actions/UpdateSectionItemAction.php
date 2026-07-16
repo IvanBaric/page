@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use IvanBaric\Corexis\Concerns\UsesOptimisticLocking;
 use IvanBaric\Corexis\Data\ActionResult;
+use IvanBaric\Corexis\Rules\SafePublicUrl;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
 use IvanBaric\Pages\Events\SectionItemUpdated;
@@ -66,9 +67,9 @@ final class UpdateSectionItemAction
             'description' => ['nullable', 'array'],
             'content' => ['nullable', 'array'],
             'icon' => ['nullable', 'string', 'max:255'],
-            'url' => ['nullable', 'string', 'max:2048'],
+            'url' => ['nullable', 'string', 'max:2048', new SafePublicUrl],
             'button_text' => ['nullable', 'array'],
-            'button_url' => ['nullable', 'string', 'max:2048'],
+            'button_url' => ['nullable', 'string', 'max:2048', new SafePublicUrl],
             'is_visible' => ['nullable', 'boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
             'settings' => ['nullable', 'array'],

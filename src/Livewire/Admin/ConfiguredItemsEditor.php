@@ -5,9 +5,11 @@ namespace IvanBaric\Pages\Livewire\Admin;
 use Flux\Flux;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use IvanBaric\AdminUi\Support\HeroiconRegistry;
 use IvanBaric\Corexis\Data\ActionResult as CorexisActionResult;
+use IvanBaric\Gallery\Actions\DeleteGalleryMediaAction;
 use IvanBaric\Pages\Actions\CreateSectionItemAction;
 use IvanBaric\Pages\Actions\DeleteSectionItemAction;
 use IvanBaric\Pages\Actions\ReorderSectionItemsAction;
@@ -17,12 +19,14 @@ use IvanBaric\Pages\Actions\UpdateSectionItemAction;
 use IvanBaric\Pages\Admin\Action;
 use IvanBaric\Pages\Admin\AdminSection;
 use IvanBaric\Pages\Admin\AdminSectionRegistry;
+use IvanBaric\Pages\Admin\Contracts\FieldOptionsProvider;
 use IvanBaric\Pages\Admin\Field;
 use IvanBaric\Pages\Admin\LayoutVariant;
 use IvanBaric\Pages\Admin\Tab;
 use IvanBaric\Pages\Livewire\Forms\ConfiguredSectionItemForm;
 use IvanBaric\Pages\Models\Section;
 use IvanBaric\Pages\Models\SectionItem;
+use IvanBaric\Pages\Support\OnePageNavigation;
 use IvanBaric\Pages\Support\PagesModels;
 use IvanBaric\Pages\Support\SectionItemGalleryImageSyncer;
 use Livewire\Attributes\Computed;
@@ -49,11 +53,32 @@ class ConfiguredItemsEditor extends Component
 
     public string $layoutVariant = '';
 
+    public string $sectionTitle = '';
+
+    public ?string $sectionDescription = null;
+
+    public bool $sectionShowTitle = true;
+
+    public bool $sectionShowDescription = true;
+
+    public bool $sectionShowInNavigation = false;
+
+    public ?string $sectionNavigationLabel = null;
+
     #[Url(as: 'editorTab', except: '')]
     public string $tab = '';
 
     /** @var array<string, mixed> */
     public array $settingsForm = [];
+
+    #[Locked]
+    public string $originalGalleryContentSource = '';
+
+    #[Locked]
+    public ?string $pendingGalleryContentSource = null;
+
+    /** @var array<string, array<int, array<string, mixed>>> */
+    private array $resolvedFieldOptions = [];
 
     public function mount(Section $section): void
     {
@@ -69,7 +94,42 @@ class ConfiguredItemsEditor extends Component
             data_get($settings, $this->layoutSettingsPath(), $this->layoutDefault()),
         );
         $this->settingsForm = $this->initialSettingsForm($settings);
+        $this->originalGalleryContentSource = (string) data_get($settings, 'content_source', '');
+        $this->sectionTitle = $this->section->localized('title');
+        $this->sectionDescription = $this->section->localized('description') ?: null;
+        $this->sectionShowTitle = (bool) data_get($settings, 'show_title', true);
+        $this->sectionShowDescription = (bool) data_get($settings, 'show_description', true);
+        $this->sectionShowInNavigation = (bool) data_get($settings, 'show_in_navigation', false);
+        $this->sectionNavigationLabel = filled(data_get($settings, 'navigation_label')) ? (string) data_get($settings, 'navigation_label') : null;
         $this->loadInlineItemForm();
+    }
+
+    public function hydrate(): void
+    {
+        $this->configureItemForm();
+    }
+
+    public function updatedSettingsForm(mixed $value = null, ?string $key = null): void
+    {
+        if ($key === 'content_source' && $this->shouldConfirmGallerySourceChange((string) $value)) {
+            $this->settingsForm['content_source'] = $this->originalGalleryContentSource;
+            $this->pendingGalleryContentSource = (string) $value;
+            Flux::modal($this->gallerySourceChangeModalName())->show();
+
+            return;
+        }
+
+        $visibleVariantKeys = collect($this->layoutVariants())->pluck('key')->map('strval')->all();
+
+        if ($visibleVariantKeys !== [] && ! in_array($this->layoutVariant, $visibleVariantKeys, true)) {
+            $this->layoutVariant = $visibleVariantKeys[0];
+        }
+
+        $visibleTabKeys = collect($this->editorTabs())->pluck('key')->map('strval')->all();
+
+        if (! in_array($this->tab, $visibleTabKeys, true)) {
+            $this->tab = $visibleTabKeys[0] ?? 'section';
+        }
     }
 
     public function createItem(): void
@@ -147,6 +207,8 @@ class ConfiguredItemsEditor extends Component
         if ($showToast) {
             $this->toastFromResult($result);
         }
+
+        $this->dispatchPublicSectionRefreshIfSuccessful($result);
     }
 
     public function toggleItem(string $uuid): void
@@ -157,6 +219,7 @@ class ConfiguredItemsEditor extends Component
         unset($this->items);
 
         $this->toastFromResult($result);
+        $this->dispatchPublicSectionRefreshIfSuccessful($result);
     }
 
     public function reorderItem(string $uuid, int $position): void
@@ -167,6 +230,7 @@ class ConfiguredItemsEditor extends Component
         unset($this->items);
 
         $this->toastFromResult($result);
+        $this->dispatchPublicSectionRefreshIfSuccessful($result);
     }
 
     public function confirmDeleteItem(string $uuid): void
@@ -191,6 +255,7 @@ class ConfiguredItemsEditor extends Component
         $this->dispatch('modal-close', name: $this->deleteModalName());
 
         $this->toastFromResult($result);
+        $this->dispatchPublicSectionRefreshIfSuccessful($result);
     }
 
     public function removeImage(): void
@@ -206,6 +271,8 @@ class ConfiguredItemsEditor extends Component
                 $this->saveItem(showToast: false);
             }
 
+            $this->saveSectionDetails(showToast: false);
+
             if ($this->hasLayoutTab() || $this->hasSettingsTab()) {
                 $this->saveSettings(showToast: false);
             }
@@ -220,7 +287,61 @@ class ConfiguredItemsEditor extends Component
             $this->dispatch('pages-save-finished');
         }
 
+        $this->dispatch(
+            'pages-section-editor-saved',
+            sectionUuid: (string) $this->section->getAttribute('uuid'),
+        );
         $this->toast(true, __('Promjene su spremljene.'));
+    }
+
+    public function saveSectionDetails(bool $showToast = true): void
+    {
+        $validated = $this->validate([
+            'sectionTitle' => ['required', 'string', 'max:255'],
+            'sectionDescription' => ['nullable', 'string', 'max:1000'],
+            'sectionShowTitle' => ['boolean'],
+            'sectionShowDescription' => ['boolean'],
+            'sectionShowInNavigation' => ['boolean'],
+            'sectionNavigationLabel' => ['nullable', 'string', 'max:80'],
+        ], [], [
+            'sectionTitle' => __('naziv sekcije'),
+            'sectionDescription' => __('opis sekcije'),
+            'sectionShowTitle' => __('prikaz naziva sekcije'),
+            'sectionShowDescription' => __('prikaz opisa sekcije'),
+            'sectionShowInNavigation' => __('prikaz u izborniku'),
+            'sectionNavigationLabel' => __('naziv u izborniku'),
+        ]);
+
+        $locale = corexis_locale_code() ?: (string) config('pages.translatable.default_locale', config('app.locale', 'hr'));
+        $settings = (array) $this->section->getAttribute('settings');
+        $settings['show_title'] = (bool) $validated['sectionShowTitle'];
+        $settings['show_description'] = (bool) $validated['sectionShowDescription'];
+        $settings['show_in_navigation'] = (bool) $validated['sectionShowInNavigation'];
+        $navigationLabel = trim((string) ($validated['sectionNavigationLabel'] ?? ''));
+
+        if ($navigationLabel === '') {
+            unset($settings['navigation_label']);
+        } else {
+            $settings['navigation_label'] = $navigationLabel;
+        }
+
+        $data = [
+            'title' => [$locale => trim((string) $validated['sectionTitle'])],
+            'description' => filled($validated['sectionDescription']) ? [$locale => trim((string) $validated['sectionDescription'])] : null,
+            'settings' => $settings,
+        ];
+        $result = $this->executeConfiguredAction('save_section', [$this->section, [
+            ...$data,
+        ]]) ?? $this->saveSectionFallback($data);
+
+        if ($this->resultSuccessful($result)) {
+            $this->section = $this->section->refresh();
+            $this->dispatchPublicSectionRefresh();
+        }
+
+        if ($showToast) {
+            $this->toastFromResult($result);
+        }
     }
 
     public function saveSettings(bool $showToast = true): void
@@ -246,6 +367,9 @@ class ConfiguredItemsEditor extends Component
 
         $this->section = $this->section->refresh();
         $this->settingsForm = $this->initialSettingsForm((array) $this->section->getAttribute('settings'));
+        $this->originalGalleryContentSource = (string) data_get($this->section->getAttribute('settings'), 'content_source', '');
+
+        $this->dispatchPublicSectionRefreshIfSuccessful($result);
 
         $messageKey = in_array($this->tab, $this->settingsTabKeys(), true) ? 'settings_saved' : 'layout_saved';
         $message = $this->definition()?->message($messageKey, __('Postavke sekcije su spremljene.'));
@@ -272,32 +396,131 @@ class ConfiguredItemsEditor extends Component
         return 'section-item-delete-'.$this->section->getAttribute('uuid');
     }
 
+    public function gallerySourceChangeModalName(): string
+    {
+        return 'section-gallery-source-change-'.$this->section->getAttribute('uuid');
+    }
+
+    /** @return array<int, array{id: int, name: string}> */
+    public function hiddenDirectGalleryMedia(): array
+    {
+        if (! method_exists($this->section, 'galleryMedia')) {
+            return [];
+        }
+
+        return $this->section->galleryMedia((string) config('gallery.default_collection', 'images'))
+            ->map(fn ($media): array => [
+                'id' => (int) $media->getKey(),
+                'name' => filled($media->name) ? (string) $media->name : __('Fotografija #:id', ['id' => $media->getKey()]),
+            ])
+            ->values()
+            ->all();
+    }
+
+    public function hasHiddenDirectGalleryMedia(): bool
+    {
+        return (string) data_get($this->settingsForm, 'content_source') === 'albums'
+            && $this->hiddenDirectGalleryMedia() !== [];
+    }
+
+    public function keepDirectGalleryMedia(): void
+    {
+        corexis_authorize('pages.sections.manage', $this->section);
+        abort_unless($this->pendingGalleryContentSource === 'albums', 409);
+        $this->applyPendingGalleryContentSource();
+    }
+
+    public function deleteDirectGalleryMedia(DeleteGalleryMediaAction $action): void
+    {
+        corexis_authorize('pages.sections.manage', $this->section);
+        abort_unless($this->pendingGalleryContentSource === 'albums', 409);
+        $gallery = method_exists($this->section, 'gallery')
+            ? $this->section->gallery((string) config('gallery.default_collection', 'images'))
+            : null;
+
+        if ($gallery && $gallery->getMedia($gallery->collection_name)->isNotEmpty()) {
+            $result = $action->handle($gallery, $gallery->getMedia($gallery->collection_name)->all());
+
+            if ($result->failed()) {
+                $this->toastFromResult($result);
+
+                return;
+            }
+        }
+
+        $this->section->unsetRelation('galleries');
+        $this->applyPendingGalleryContentSource();
+        $this->toast(true, __('Fotografije vezane uz sekciju su obrisane.'));
+    }
+
+    public function cancelGallerySourceChange(): void
+    {
+        $this->pendingGalleryContentSource = null;
+    }
+
     public function imageUrl(): ?string
     {
         return $this->form->image;
     }
 
+    private function dispatchPublicSectionRefreshIfSuccessful(CorexisActionResult $result): void
+    {
+        if ($this->resultSuccessful($result)) {
+            $this->dispatchPublicSectionRefresh();
+        }
+    }
+
+    private function dispatchPublicSectionRefresh(): void
+    {
+        $sectionUuid = (string) $this->section->getAttribute('uuid');
+
+        if ($sectionUuid !== '') {
+            $this->dispatch('pages-public-section-updated.'.$sectionUuid);
+        }
+    }
+
     /** @return array<int, array{key: string, label: string, type: string, icon: string}> */
     public function editorTabs(): array
     {
-        return array_map(
-            fn (Tab $tab): array => [
-                'key' => $tab->key(),
-                'label' => $tab->labelValue(),
-                'type' => $tab->type(),
-                'icon' => $this->iconForTab($tab),
-            ],
-            $this->definition()?->tabsValue() ?? [],
-        );
+        return [
+            ['key' => 'section', 'label' => __('O sekciji'), 'type' => 'section', 'icon' => 'information-circle'],
+            ...array_map(
+                fn (Tab $tab): array => [
+                    'key' => $tab->key(),
+                    'label' => $tab->labelValue(),
+                    'type' => $tab->type(),
+                    'icon' => $this->iconForTab($tab),
+                ],
+                array_values(array_filter(
+                    $this->definition()?->tabsValue() ?? [],
+                    fn (Tab $tab): bool => $this->isConditionVisible($tab->optionValue('visible_when')),
+                )),
+            ),
+        ];
+    }
+
+    #[Computed]
+    public function sectionNavigationSettingsAvailable(): bool
+    {
+        $pageModel = PagesModels::page();
+        $publicPages = $pageModel::query()->published()->ordered()->get();
+        $page = $this->section->page;
+
+        return app(OnePageNavigation::class)->isAvailable($publicPages)
+            && (string) data_get($publicPages->first(), 'uuid') === (string) $page?->getAttribute('uuid')
+            && app(OnePageNavigation::class)->canShowSection($this->section);
     }
 
     /** @return array<int, array<string, mixed>> */
     public function layoutVariants(): array
     {
-        return array_map(
+        return array_values(array_map(
             static fn (LayoutVariant $variant): array => $variant->toArray(),
-            $this->layoutTab()?->variantsValue() ?? [],
-        );
+            array_filter(
+                $this->layoutTab()?->variantsValue() ?? [],
+                fn (LayoutVariant $variant): bool => $this->isConditionVisible($variant->optionValue('visible_when')),
+            ),
+        ));
     }
 
     public function emptyText(): string
@@ -485,7 +708,7 @@ class ConfiguredItemsEditor extends Component
     public function viewTabs(): array
     {
         return array_values(array_filter(array_map(
-            static fn (Tab $tab): ?array => $tab->type() === 'view' ? [
+            fn (Tab $tab): ?array => $tab->type() === 'view' && $this->isConditionVisible($tab->optionValue('visible_when')) ? [
                 'key' => $tab->key(),
                 'label' => $tab->labelValue(),
                 'view' => (string) $tab->optionValue('view', ''),
@@ -499,6 +722,24 @@ class ConfiguredItemsEditor extends Component
     public function hasViewTabs(): bool
     {
         return $this->viewTabs() !== [];
+    }
+
+    /** @return array<int, array{key: string, component: string, parameters: array<string, mixed>}> */
+    public function livewireTabs(): array
+    {
+        return array_values(array_filter(array_map(
+            fn (Tab $tab): ?array => $tab->type() === 'livewire' && $this->isConditionVisible($tab->optionValue('visible_when')) ? [
+                'key' => $tab->key(),
+                'component' => (string) $tab->optionValue('component', ''),
+                'parameters' => (array) $tab->optionValue('parameters', []),
+            ] : null,
+            $this->definition()?->tabsValue() ?? [],
+        ), static fn (?array $tab): bool => $tab !== null && $tab['component'] !== ''));
+    }
+
+    public function hasLivewireTabs(): bool
+    {
+        return $this->livewireTabs() !== [];
     }
 
     public function sourceTabKey(): string
@@ -629,7 +870,10 @@ class ConfiguredItemsEditor extends Component
     /** @return array<int, Tab> */
     private function settingsTabs(): array
     {
-        return $this->definition()?->settingsTabs() ?? [];
+        return array_values(array_filter(
+            $this->definition()?->settingsTabs() ?? [],
+            fn (Tab $tab): bool => $this->isConditionVisible($tab->optionValue('visible_when')),
+        ));
     }
 
     private function applyHiddenTitleFallback(): void
@@ -657,6 +901,7 @@ class ConfiguredItemsEditor extends Component
             static fn (Tab $tab): string => $tab->key(),
             $this->definition()?->tabsValue() ?? [],
         );
+        $keys[] = 'section';
 
         return in_array($tab, $keys, true) ? $tab : $this->firstTabKey();
     }
@@ -709,8 +954,16 @@ class ConfiguredItemsEditor extends Component
     {
         $values = [];
 
-        foreach ($this->settingsFieldsValue() as $field) {
-            $values[$field->key()] = data_get($settings, $this->settingsStoragePath($field), $field->optionValue('default'));
+        foreach ($this->allSettingsFieldsValue() as $field) {
+            $value = data_get($settings, $this->settingsStoragePath($field), $field->optionValue('default'));
+
+            if (($value === null || $value === '') && in_array('required', $field->rulesValue(), true)) {
+                $value = $field->optionValue('default');
+            }
+
+            $values[$field->key()] = $field->type() === 'checkbox_list'
+                ? $this->normalizeSettingValue($field, $value)
+                : $value;
         }
 
         return $values;
@@ -738,6 +991,16 @@ class ConfiguredItemsEditor extends Component
             if ($field->labelValue() !== '') {
                 $attributes['settingsForm.'.$field->key()] = $field->labelValue();
             }
+
+            if ($field->type() === 'checkbox_list') {
+                $allowedValues = array_map(
+                    static fn (array $option): string => (string) $option['value'],
+                    $this->fieldOptions($field),
+                );
+
+                $rules['settingsForm.'.$field->key().'.*'] = ['string', Rule::in($allowedValues)];
+                $attributes['settingsForm.'.$field->key().'.*'] = $field->labelValue();
+            }
         }
 
         if ($rules !== []) {
@@ -764,6 +1027,21 @@ class ConfiguredItemsEditor extends Component
         ));
     }
 
+    /** @return array<int, Field> */
+    private function allSettingsFieldsValue(): array
+    {
+        $tabs = array_values($this->definition()?->settingsTabs() ?? []);
+
+        if ($tabs === []) {
+            return [];
+        }
+
+        return array_merge(...array_map(
+            static fn (Tab $tab): array => $tab->fieldsValue(),
+            $tabs,
+        ));
+    }
+
     /** @return array<int, array<string, mixed>> */
     private function settingsFieldsForTab(Tab $tab): array
     {
@@ -777,9 +1055,37 @@ class ConfiguredItemsEditor extends Component
                 'display' => (string) $field->optionValue('display', ''),
                 'rows' => (int) $field->optionValue('rows', 4),
                 'picker' => $this->iconPickerEnabled($field),
+                'visible' => $this->isConditionVisible($field->optionValue('visible_when')),
+                'reactive' => $this->fieldHasDependents($field->key()),
             ],
             $tab->fieldsValue(),
         );
+    }
+
+    private function isConditionVisible(mixed $condition): bool
+    {
+        if (! is_array($condition) || ! filled($condition['field'] ?? null)) {
+            return true;
+        }
+
+        return data_get($this->settingsForm, (string) $condition['field']) === ($condition['value'] ?? null);
+    }
+
+    private function fieldHasDependents(string $fieldKey): bool
+    {
+        foreach ($this->definition()?->tabsValue() ?? [] as $tab) {
+            if ((string) data_get($tab->optionValue('visible_when'), 'field') === $fieldKey) {
+                return true;
+            }
+
+            foreach ($tab->fieldsValue() as $field) {
+                if ((string) data_get($field->optionValue('visible_when'), 'field') === $fieldKey) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function settingsField(string $key): ?Field
@@ -820,6 +1126,18 @@ class ConfiguredItemsEditor extends Component
             return is_numeric($value) && str_contains((string) $value, '.')
                 ? (float) $value
                 : (int) $value;
+        }
+
+        if ($field->type() === 'checkbox_list') {
+            $allowedValues = array_map(
+                static fn (array $option): string => (string) $option['value'],
+                $this->fieldOptions($field),
+            );
+
+            return array_values(array_unique(array_intersect(
+                array_map('strval', (array) $value),
+                $allowedValues,
+            )));
         }
 
         if ($field->type() === 'select') {
@@ -869,7 +1187,24 @@ class ConfiguredItemsEditor extends Component
     /** @return array<int, array<string, mixed>> */
     private function fieldOptions(Field $field): array
     {
-        return array_map(
+        $cacheKey = $field->key().':'.(string) $field->optionValue('options_provider', 'static');
+
+        if (array_key_exists($cacheKey, $this->resolvedFieldOptions)) {
+            return $this->resolvedFieldOptions[$cacheKey];
+        }
+
+        $options = (array) $field->optionValue('options', []);
+        $providerClass = $field->optionValue('options_provider');
+
+        if (is_string($providerClass) && is_a($providerClass, FieldOptionsProvider::class, true)) {
+            $provider = app($providerClass);
+
+            if ($provider instanceof FieldOptionsProvider) {
+                $options = $provider->options($this->section, $field);
+            }
+        }
+
+        return $this->resolvedFieldOptions[$cacheKey] = array_map(
             static function (mixed $key, mixed $option): array {
                 if (is_array($option)) {
                     return array_replace($option, [
@@ -884,8 +1219,8 @@ class ConfiguredItemsEditor extends Component
                     'label' => (string) $option,
                 ];
             },
-            array_keys((array) $field->optionValue('options', [])),
-            (array) $field->optionValue('options', []),
+            array_keys($options),
+            $options,
         );
     }
 
@@ -966,6 +1301,25 @@ class ConfiguredItemsEditor extends Component
             'large' => 'w-full aspect-video',
             default => is_string($size) ? $size : 'w-full aspect-video',
         };
+    }
+
+    private function shouldConfirmGallerySourceChange(string $value): bool
+    {
+        return in_array((string) $this->section->getAttribute('type'), ['gallery', 'gallery_grid'], true)
+            && $this->originalGalleryContentSource === 'direct'
+            && $value === 'albums'
+            && $this->hiddenDirectGalleryMedia() !== [];
+    }
+
+    private function applyPendingGalleryContentSource(): void
+    {
+        if ($this->pendingGalleryContentSource !== null) {
+            $this->settingsForm['content_source'] = $this->pendingGalleryContentSource;
+        }
+
+        $this->pendingGalleryContentSource = null;
+        Flux::modal($this->gallerySourceChangeModalName())->close();
+        $this->updatedSettingsForm();
     }
 
     private function formPropertyForField(Field $field): string

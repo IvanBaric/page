@@ -107,6 +107,50 @@ return [
         'middleware' => ['web', 'auth'],
     ],
 
+    'public_site' => [
+        'enabled' => false,
+        'view' => 'pages::public-site.page',
+        'view_subject_variable' => 'subject',
+        'layout' => 'layouts.public',
+        'subject_resolver' => null,
+        'view_tracker' => null,
+        'subject' => [
+            'model' => null,
+            'request_attribute' => null,
+            'slug_column' => 'slug',
+            'tenant_column' => 'team_id',
+            'active_column' => 'is_active',
+            'active_value' => true,
+            'eager_load' => [],
+        ],
+        'route' => [
+            'enabled' => false,
+            'uri' => '/{subjectSlug}/{pageSlug?}',
+            'name' => 'pages.public.show',
+            'middleware' => ['web'],
+            'subject_parameter' => 'subjectSlug',
+            'page_parameter' => 'pageSlug',
+            'where' => [],
+        ],
+        'content_route' => [
+            'enabled' => false,
+            'uri' => '/{subjectSlug}/{pageSlug}/{contentSlug}',
+            'name' => null,
+            'middleware' => ['web'],
+            'content_parameter' => 'contentSlug',
+            'where' => [],
+        ],
+        'content_providers' => [],
+    ],
+
+    'public_management' => [
+        'enabled' => false,
+        'event' => 'pages-open-public-management',
+        'modal_name' => 'public-management',
+        'modal_class' => 'w-full md:w-2xl xl:w-5xl',
+        'panels' => [],
+    ],
+
     'admin' => [
         'routes' => true,
         'name_prefix' => 'admin.pages.',

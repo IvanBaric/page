@@ -2,4 +2,5 @@
 
 return [
     'home' => 'Početna',
+    'opening' => 'Otvaranje...',
 ];

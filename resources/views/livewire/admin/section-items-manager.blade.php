@@ -25,6 +25,14 @@
             </x-admin-ui::submit-button>
         </div>
     </form>
+    @if ($items->isEmpty())
+        <x-admin-ui::empty-state
+            :title="__('Nema stavki')"
+            :description="__('Dodajte prvu stavku kako biste ispunili ovu sekciju sadržajem.')"
+        >
+            <x-slot:icon><flux:icon name="document-plus" class="size-6" /></x-slot:icon>
+        </x-admin-ui::empty-state>
+    @else
     <flux:table>
         <flux:table.columns>
             <flux:table.column>{{ __('Title') }}</flux:table.column>
@@ -34,7 +42,7 @@
             <flux:table.column>{{ __('Actions') }}</flux:table.column>
         </flux:table.columns>
         <flux:table.rows>
-            @forelse ($items as $item)
+            @foreach ($items as $item)
                 <flux:table.row :key="$item->uuid">
                     <flux:table.cell>{{ $item->localized('title') ?: __('Untitled item') }}</flux:table.cell>
                     <flux:table.cell>{{ $item->icon }}</flux:table.cell>
@@ -48,11 +56,8 @@
                         </div>
                     </flux:table.cell>
                 </flux:table.row>
-            @empty
-                <flux:table.row>
-                    <flux:table.cell colspan="5">{{ __('No items found.') }}</flux:table.cell>
-                </flux:table.row>
-            @endforelse
+            @endforeach
         </flux:table.rows>
     </flux:table>
+    @endif
 </section>

@@ -11,6 +11,7 @@
         "ivanbaric/admin-ui": "dev-main",
         "ivanbaric/corexis": "dev-main as 1.0.0",
         "ivanbaric/gallery": "dev-main",
+        "ivanbaric/template-engine": "dev-main",
         "livewire/livewire": "^4.0"
     },
     "require-dev": {
@@ -36,6 +37,13 @@
         {
             "type": "path",
             "url": "../gallery",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
+            "type": "path",
+            "url": "../template-engine",
             "options": {
                 "symlink": true
             }

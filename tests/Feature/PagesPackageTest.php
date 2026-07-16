@@ -1,12 +1,20 @@
 <?php
 
+use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\View as ViewFacade;
 use IvanBaric\Corexis\Contracts\TenantResolver;
 use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Pages\Actions\CreatePageAction;
 use IvanBaric\Pages\Actions\CreateSectionAction;
 use IvanBaric\Pages\Actions\CreateSectionItemAction;
+use IvanBaric\Pages\Actions\DeletePageAction;
+use IvanBaric\Pages\Actions\MovePageAction;
 use IvanBaric\Pages\Actions\PublishPageAction;
 use IvanBaric\Pages\Actions\ReorderSectionItemsAction;
 use IvanBaric\Pages\Actions\ReorderSectionsAction;
@@ -15,9 +23,14 @@ use IvanBaric\Pages\Actions\UpdatePageAction;
 use IvanBaric\Pages\Admin\Action;
 use IvanBaric\Pages\Admin\AdminSection;
 use IvanBaric\Pages\Admin\AdminSectionRegistry;
+use IvanBaric\Pages\Admin\Contracts\FieldOptionsProvider;
 use IvanBaric\Pages\Admin\Field;
 use IvanBaric\Pages\Admin\LayoutVariant;
 use IvanBaric\Pages\Admin\Tab;
+use IvanBaric\Pages\Contracts\PublicContentProvider;
+use IvanBaric\Pages\Contracts\PublicManagementPanelDataProvider;
+use IvanBaric\Pages\Data\PublicContentContext;
+use IvanBaric\Pages\Data\PublicManagementPanel;
 use IvanBaric\Pages\Events\PageCreated;
 use IvanBaric\Pages\Events\PagePublished;
 use IvanBaric\Pages\Events\PageSectionsReordered;
@@ -26,9 +39,16 @@ use IvanBaric\Pages\Events\PageUpdated;
 use IvanBaric\Pages\Events\SectionCreated;
 use IvanBaric\Pages\Events\SectionItemCreated;
 use IvanBaric\Pages\Events\SectionItemsReordered;
+use IvanBaric\Pages\Http\Controllers\PublicContentController;
 use IvanBaric\Pages\Models\Page;
 use IvanBaric\Pages\Models\Section;
 use IvanBaric\Pages\Models\SectionItem;
+use IvanBaric\Pages\Support\CurrentPublicSite;
+use IvanBaric\Pages\Support\EloquentPublicSiteSubjectResolver;
+use IvanBaric\Pages\Support\PublicManagementRegistry;
+use IvanBaric\Pages\Support\PublicSitePageResolver;
+use IvanBaric\Pages\Support\PublicSiteUrl;
+use IvanBaric\Pages\Support\YouTubeVideo;
 
 class PagesCorexisTenantResolverFake implements TenantResolver
 {
@@ -91,6 +111,46 @@ class PagesTestAdminSectionProvider
     }
 }
 
+class PagesTestFieldOptionsProvider implements FieldOptionsProvider
+{
+    public function options(Model $context, Field $field): array
+    {
+        return [];
+    }
+}
+
+class PagesTestPublicSubject extends Model
+{
+    protected $table = 'public_subjects';
+
+    protected $guarded = [];
+
+    protected function casts(): array
+    {
+        return ['is_active' => 'boolean'];
+    }
+}
+
+class PagesTestPublicContentProvider implements PublicContentProvider
+{
+    public static ?PublicContentContext $context = null;
+
+    public function render(Request $request, PublicContentContext $context): View
+    {
+        self::$context = $context;
+
+        return view('pages-test::public-content', ['context' => $context]);
+    }
+}
+
+class PagesTestPublicManagementDataProvider implements PublicManagementPanelDataProvider
+{
+    public function data(PublicManagementPanel $panel): array
+    {
+        return ['panelKey' => $panel->key];
+    }
+}
+
 it('boots the package', function (): void {
     expect(config('pages.tables.pages'))->toBe('pages');
 });
@@ -98,6 +158,203 @@ it('boots the package', function (): void {
 it('loads config', function (): void {
     expect(config('pages.templates.classic.label'))->toBe('Klasični')
         ->and(config('pages.section_types.hero.label'))->toBe('Uvodni blok');
+});
+
+it('resolves a configurable public subject page sections and navigation', function (): void {
+    Schema::create('public_subjects', function (Blueprint $table): void {
+        $table->id();
+        $table->unsignedBigInteger('team_id');
+        $table->string('slug')->unique();
+        $table->boolean('is_active')->default(true);
+        $table->timestamps();
+    });
+
+    config()->set('pages.public_site.subject.model', PagesTestPublicSubject::class);
+
+    $subjectModel = PagesTestPublicSubject::query()->create([
+        'team_id' => 55,
+        'slug' => 'reusable-site',
+        'is_active' => true,
+    ]);
+    $home = Page::query()->create([
+        'team_id' => 55,
+        'title' => ['en' => 'Home'],
+        'status' => 'published',
+        'is_home' => true,
+        'is_published' => true,
+        'published_at' => now(),
+        'sort_order' => 0,
+    ]);
+    $about = Page::query()->create([
+        'team_id' => 55,
+        'title' => ['en' => 'About'],
+        'slug' => 'about',
+        'status' => 'published',
+        'is_published' => true,
+        'published_at' => now(),
+        'sort_order' => 1,
+    ]);
+    $about->sections()->create([
+        'team_id' => 55,
+        'type' => 'about',
+        'title' => ['en' => 'Our story'],
+        'is_visible' => true,
+        'sort_order' => 0,
+    ]);
+
+    $subject = app(EloquentPublicSiteSubjectResolver::class)->resolve(
+        Request::create('/reusable-site/about'),
+        'reusable-site',
+    );
+
+    expect($subject)->not->toBeNull()
+        ->and($subject?->model->is($subjectModel))->toBeTrue()
+        ->and($subject?->tenantId)->toBe(55);
+
+    $resolved = app(PublicSitePageResolver::class)->resolve($subject, 'about');
+
+    expect($resolved['page']->is($about))->toBeTrue()
+        ->and($resolved['page']->relationLoaded('visibleSections'))->toBeTrue()
+        ->and($resolved['page']->visibleSections)->toHaveCount(1)
+        ->and($resolved['publicPages']->pluck('uuid')->all())->toBe([$home->uuid, $about->uuid]);
+
+    $subjectModel->forceFill(['is_active' => false])->save();
+
+    expect(app(EloquentPublicSiteSubjectResolver::class)->resolve(
+        Request::create('/reusable-site'),
+        'reusable-site',
+    ))->toBeNull();
+
+    $subjectModel->forceFill(['is_active' => true])->save();
+    app()->bind(TenantResolver::class, PagesCorexisTenantResolverFake::class);
+    PagesCorexisTenantResolverFake::$tenantId = 55;
+    config()->set('pages.public_site.route.name', 'test.public-site');
+    config()->set('pages.public_site.route.subject_parameter', 'subjectSlug');
+    config()->set('pages.public_site.route.page_parameter', 'pageSlug');
+    config()->set('pages.public_site.content_route.name', 'test.public-site.content');
+    config()->set('pages.public_site.content_route.content_parameter', 'contentSlug');
+    Route::get('/test-sites/{subjectSlug}/{pageSlug?}', fn (): string => 'ok')->name('test.public-site');
+    Route::get('/test-sites/{subjectSlug}/{pageSlug}/{contentSlug}', fn (): string => 'ok')->name('test.public-site.content');
+    Route::getRoutes()->refreshNameLookups();
+
+    $url = app(PublicSiteUrl::class);
+
+    expect(app(CurrentPublicSite::class)->subject()?->is($subjectModel))->toBeTrue()
+        ->and(app(CurrentPublicSite::class)->url())->toBeString()->toEndWith('/test-sites/reusable-site')
+        ->and($url->page($subjectModel, 'about'))->toEndWith('/test-sites/reusable-site/about')
+        ->and($url->contentForSlug('reusable-site', 'about', 'first-item'))
+        ->toEndWith('/test-sites/reusable-site/about/first-item');
+});
+
+it('dispatches public single content through the configured page provider', function (): void {
+    Schema::create('public_subjects', function (Blueprint $table): void {
+        $table->id();
+        $table->unsignedBigInteger('team_id');
+        $table->string('slug')->unique();
+        $table->boolean('is_active')->default(true);
+        $table->timestamps();
+    });
+
+    PagesTestPublicSubject::query()->create([
+        'team_id' => 66,
+        'slug' => 'content-site',
+        'is_active' => true,
+    ]);
+    Page::query()->create([
+        'team_id' => 66,
+        'page_key' => 'articles',
+        'title' => ['en' => 'Articles'],
+        'slug' => 'news',
+        'status' => 'published',
+        'is_published' => true,
+        'published_at' => now(),
+        'sort_order' => 0,
+    ]);
+
+    ViewFacade::addNamespace('pages-test', __DIR__.'/../fixtures');
+    config()->set('pages.public_site.subject.model', PagesTestPublicSubject::class);
+    config()->set('pages.public_site.content_providers', [
+        'articles' => PagesTestPublicContentProvider::class,
+    ]);
+    config()->set('pages.public_site.route.subject_parameter', 'subjectSlug');
+    config()->set('pages.public_site.route.page_parameter', 'pageSlug');
+    config()->set('pages.public_site.content_route.content_parameter', 'contentSlug');
+    PagesTestPublicContentProvider::$context = null;
+
+    Route::get('/content-sites/{subjectSlug}/{pageSlug}/{contentSlug}', PublicContentController::class);
+
+    $this->get('/content-sites/content-site/news/first-article')
+        ->assertOk()
+        ->assertSeeText('content-site|articles|first-article|1');
+
+    expect(PagesTestPublicContentProvider::$context)
+        ->not->toBeNull()
+        ->and(PagesTestPublicContentProvider::$context?->subject->tenantId)->toBe(66)
+        ->and(PagesTestPublicContentProvider::$context?->page->relationLoaded('visibleSections'))->toBeTrue();
+});
+
+it('resolves configurable public management panels and their data providers', function (): void {
+    config()->set('pages.public_management.panels', [
+        'website' => [
+            'title' => 'Website',
+            'icon' => 'globe-alt',
+            'permission' => 'pages.update',
+            'view' => 'test.website',
+            'data_provider' => PagesTestPublicManagementDataProvider::class,
+            'parameters' => ['embedded' => true],
+        ],
+        'pages' => [
+            'title' => 'Pages',
+            'icon' => 'document-text',
+            'event' => 'pages-open-public-page-structure',
+        ],
+    ]);
+
+    $registry = app(PublicManagementRegistry::class);
+    $website = $registry->get('website');
+    $pages = $registry->get('pages');
+
+    expect($website)->toBeInstanceOf(PublicManagementPanel::class)
+        ->and($website?->permission)->toBe('pages.update')
+        ->and($website?->view)->toBe('test.website')
+        ->and($website?->parameters)->toBe(['embedded' => true])
+        ->and($registry->dataFor($website))->toBe(['panelKey' => 'website'])
+        ->and($pages?->event)->toBe('pages-open-public-page-structure')
+        ->and($registry->get('missing'))->toBeNull()
+        ->and($registry->get('website.nested'))->toBeNull();
+
+    config()->set('pages.public_management.panels.invalid', [
+        'title' => 'Invalid',
+        'icon' => 'x-mark',
+        'view' => 'test.invalid',
+        'event' => 'test-invalid',
+    ]);
+
+    expect(fn (): ?PublicManagementPanel => $registry->get('invalid'))
+        ->toThrow(InvalidArgumentException::class, 'exactly one');
+});
+
+it('describes reusable checkbox list fields with dynamic option providers', function (): void {
+    $field = Field::checkboxList('taxonomy_item_uuids')
+        ->label('Taxonomy')
+        ->optionsProvider(PagesTestFieldOptionsProvider::class)
+        ->storage('settings.taxonomy_item_uuids');
+
+    expect($field->type())->toBe('checkbox_list')
+        ->and($field->rulesValue())->toBe(['array', 'max:100'])
+        ->and($field->optionValue('options_provider'))->toBe(PagesTestFieldOptionsProvider::class)
+        ->and($field->optionValue('storage'))->toBe('settings.taxonomy_item_uuids');
+});
+
+it('describes conditional fields tabs and layout variants', function (): void {
+    $condition = ['field' => 'content_source', 'value' => 'taxonomy'];
+
+    expect(Field::checkboxList('taxonomy_item_uuids')->visibleWhen('content_source', 'taxonomy')->optionValue('visible_when'))
+        ->toBe($condition)
+        ->and(Tab::settings('Filter')->visibleWhen('content_source', 'taxonomy')->optionValue('visible_when'))
+        ->toBe($condition)
+        ->and(LayoutVariant::add('filtered')->visibleWhen('content_source', 'taxonomy')->optionValue('visible_when'))
+        ->toBe($condition);
 });
 
 it('defines admin sections through the reusable fluent API', function (): void {
@@ -123,6 +380,9 @@ it('defines admin sections through the reusable fluent API', function (): void {
                 ->fields([
                     Field::text('title')->label('Title')->defaultFrom('name'),
                 ]),
+
+            Tab::livewire('External content', 'example.source-manager', 'source')
+                ->parameters(['mode' => 'compact']),
         ]);
 
     expect($section->key())->toBe('testimonials')
@@ -136,7 +396,9 @@ it('defines admin sections through the reusable fluent API', function (): void {
         ->and($section->tab('header')?->type())->toBe('form')
         ->and($section->tab('header')?->optionValue('submit_label'))->toBe('Save header')
         ->and($section->tab('header')?->field('title')?->optionValue('default_from'))->toBe('name')
-        ->and($section->toArray()['tabs'])->toHaveCount(3);
+        ->and($section->tab('source')?->optionValue('component'))->toBe('example.source-manager')
+        ->and($section->tab('source')?->optionValue('parameters'))->toBe(['mode' => 'compact'])
+        ->and($section->toArray()['tabs'])->toHaveCount(4);
 });
 
 it('resolves admin section definitions from configured providers', function (): void {
@@ -151,6 +413,19 @@ it('resolves admin section definitions from configured providers', function (): 
     expect($definition)->toBeInstanceOf(AdminSection::class)
         ->and($definition?->labelValue())->toBe('Testimonials')
         ->and($definition?->itemsTab()?->field('image')?->optionValue('size'))->toBe('small');
+});
+
+it('accepts only genuine youtube hosts when parsing videos', function (): void {
+    expect(YouTubeVideo::fromUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ'))
+        ->not->toBeNull()
+        ->and(YouTubeVideo::fromUrl('https://youtu.be/dQw4w9WgXcQ'))
+        ->not->toBeNull()
+        ->and(YouTubeVideo::fromUrl('https://youtube.com.evil.test/watch?v=dQw4w9WgXcQ'))
+        ->toBeNull()
+        ->and(YouTubeVideo::fromUrl('https://evil.test/watch?v=dQw4w9WgXcQ'))
+        ->toBeNull()
+        ->and(YouTubeVideo::fromUrl('https://notyoutu.be/dQw4w9WgXcQ'))
+        ->toBeNull();
 });
 
 it('creates the package tables', function (): void {
@@ -241,6 +516,158 @@ it('finds page by slug', function (): void {
     ]);
 
     expect(Page::forSlug($page->slug)?->is($page))->toBeTrue();
+});
+
+it('creates a tenant scoped subpage and exposes parent relationships', function (): void {
+    app()->bind(TenantResolver::class, PagesCorexisTenantResolverFake::class);
+    PagesCorexisTenantResolverFake::$tenantId = 987;
+
+    $parent = Page::query()->create([
+        'title' => ['en' => 'Products'],
+        'is_home' => false,
+    ]);
+
+    $result = app(CreatePageAction::class)->handle([
+        'title' => ['en' => 'Wood products'],
+        'parent_uuid' => $parent->uuid,
+    ]);
+
+    expect($result->success)->toBeTrue()
+        ->and($result->data->parent?->is($parent))->toBeTrue()
+        ->and($parent->children()->first()?->is($result->data))->toBeTrue();
+});
+
+it('rejects cross tenant and second level page parents', function (): void {
+    app()->bind(TenantResolver::class, PagesCorexisTenantResolverFake::class);
+
+    PagesCorexisTenantResolverFake::$tenantId = 111;
+    $foreignParent = Page::query()->create(['title' => ['en' => 'Foreign']]);
+
+    PagesCorexisTenantResolverFake::$tenantId = 987;
+    $parent = Page::query()->create(['title' => ['en' => 'Products']]);
+    $child = Page::query()->create([
+        'title' => ['en' => 'Wood products'],
+        'parent_id' => $parent->getKey(),
+    ]);
+
+    $crossTenant = app(CreatePageAction::class)->handle([
+        'title' => ['en' => 'Invalid child'],
+        'parent_uuid' => $foreignParent->uuid,
+    ]);
+    $secondLevel = app(CreatePageAction::class)->handle([
+        'title' => ['en' => 'Too deep'],
+        'parent_uuid' => $child->uuid,
+    ]);
+
+    expect($crossTenant->failed())->toBeTrue()
+        ->and($secondLevel->failed())->toBeTrue();
+});
+
+it('moves and reorders pages between navigation levels', function (): void {
+    app()->bind(TenantResolver::class, PagesCorexisTenantResolverFake::class);
+    PagesCorexisTenantResolverFake::$tenantId = 987;
+
+    $firstParent = Page::query()->create(['title' => ['en' => 'Products'], 'sort_order' => 0]);
+    $secondParent = Page::query()->create(['title' => ['en' => 'Services'], 'sort_order' => 1]);
+    $firstChild = Page::query()->create([
+        'title' => ['en' => 'Wood products'],
+        'parent_id' => $firstParent->getKey(),
+        'sort_order' => 0,
+    ]);
+    $secondChild = Page::query()->create([
+        'title' => ['en' => 'Metal products'],
+        'parent_id' => $firstParent->getKey(),
+        'sort_order' => 1,
+    ]);
+    $serviceChild = Page::query()->create([
+        'title' => ['en' => 'Consulting'],
+        'parent_id' => $secondParent->getKey(),
+        'sort_order' => 0,
+    ]);
+
+    $moved = app(MovePageAction::class)->handle($secondChild, $secondParent->uuid, 0);
+
+    expect($moved->success)->toBeTrue()
+        ->and($secondChild->refresh()->parent_id)->toBe($secondParent->getKey())
+        ->and($firstParent->children()->pluck('uuid')->all())->toBe([$firstChild->uuid])
+        ->and($secondParent->children()->pluck('uuid')->all())->toBe([$secondChild->uuid, $serviceChild->uuid]);
+
+    $reordered = app(MovePageAction::class)->handle($serviceChild, $secondParent->uuid, 0);
+
+    expect($reordered->success)->toBeTrue()
+        ->and($secondParent->children()->pluck('uuid')->all())->toBe([$serviceChild->uuid, $secondChild->uuid]);
+
+    $promoted = app(MovePageAction::class)->handle($secondChild, null, 1);
+
+    expect($promoted->success)->toBeTrue()
+        ->and($secondChild->refresh()->parent_id)->toBeNull()
+        ->and(Page::query()->whereNull('parent_id')->ordered()->pluck('uuid')->all())
+        ->toBe([$firstParent->uuid, $secondChild->uuid, $secondParent->uuid]);
+});
+
+it('rejects invalid page hierarchy moves', function (): void {
+    app()->bind(TenantResolver::class, PagesCorexisTenantResolverFake::class);
+
+    PagesCorexisTenantResolverFake::$tenantId = 987;
+    $home = Page::query()->create(['title' => ['en' => 'Home'], 'is_home' => true]);
+    $parent = Page::query()->create(['title' => ['en' => 'Products']]);
+    $otherParent = Page::query()->create(['title' => ['en' => 'Services']]);
+    Page::query()->create(['title' => ['en' => 'Child'], 'parent_id' => $parent->getKey()]);
+
+    PagesCorexisTenantResolverFake::$tenantId = 111;
+    $foreignParent = Page::query()->create(['title' => ['en' => 'Foreign']]);
+    PagesCorexisTenantResolverFake::$tenantId = 987;
+
+    expect(app(MovePageAction::class)->handle($home, $otherParent->uuid, 0)->failed())->toBeTrue()
+        ->and(app(MovePageAction::class)->handle($parent, $otherParent->uuid, 0)->failed())->toBeTrue()
+        ->and(app(MovePageAction::class)->handle($otherParent, $foreignParent->uuid, 0)->failed())->toBeTrue();
+
+    PagesCorexisTenantResolverFake::$tenantId = 111;
+
+    expect(app(MovePageAction::class)->handle($otherParent, null, 0)->failed())->toBeTrue();
+});
+
+it('normalizes both page groups when an existing form changes the parent', function (): void {
+    app()->bind(TenantResolver::class, PagesCorexisTenantResolverFake::class);
+    PagesCorexisTenantResolverFake::$tenantId = 987;
+
+    $firstParent = Page::query()->create(['title' => ['en' => 'Products'], 'sort_order' => 0]);
+    $secondParent = Page::query()->create(['title' => ['en' => 'Services'], 'sort_order' => 1]);
+    $remainingChild = Page::query()->create([
+        'title' => ['en' => 'Wood'],
+        'parent_id' => $firstParent->getKey(),
+        'sort_order' => 0,
+    ]);
+    $movingChild = Page::query()->create([
+        'title' => ['en' => 'Metal'],
+        'parent_id' => $firstParent->getKey(),
+        'sort_order' => 7,
+    ]);
+
+    $result = app(UpdatePageAction::class)->handle($movingChild, [
+        'title' => $movingChild->title,
+        'status' => $movingChild->status,
+        'parent_uuid' => $secondParent->uuid,
+    ]);
+
+    expect($result->success)->toBeTrue()
+        ->and($remainingChild->refresh()->sort_order)->toBe(0)
+        ->and($movingChild->refresh()->parent_id)->toBe($secondParent->getKey())
+        ->and($movingChild->sort_order)->toBe(0);
+});
+
+it('promotes child pages when their parent is archived', function (): void {
+    $parent = Page::query()->create(['title' => ['en' => 'Products']]);
+    $child = Page::query()->create([
+        'title' => ['en' => 'Wood products'],
+        'parent_id' => $parent->getKey(),
+    ]);
+
+    $result = app(DeletePageAction::class)->handle($parent);
+
+    expect($result->success)->toBeTrue()
+        ->and($parent->refresh()->trashed())->toBeTrue()
+        ->and($child->refresh()->parent_id)->toBeNull();
 });
 
 it('keeps only one home page per team', function (): void {
@@ -360,6 +787,31 @@ it('section type validation works', function (): void {
     ]);
 
     expect($result->success)->toBeFalse();
+});
+
+it('rejects unsafe section and item links', function (): void {
+    $page = Page::query()->create([
+        'title' => ['en' => 'Safe links'],
+    ]);
+
+    $unsafeSection = app(CreateSectionAction::class)->handle($page, [
+        'type' => 'hero',
+        'button_url' => 'javascript:alert(1)',
+    ]);
+    $section = app(CreateSectionAction::class)->handle($page, [
+        'type' => 'hero',
+        'button_url' => '/kontakt',
+    ]);
+    $unsafeItem = app(CreateSectionItemAction::class)->handle($section->data, [
+        'title' => ['en' => 'Unsafe item'],
+        'url' => 'data:text/html,<script>alert(1)</script>',
+    ]);
+
+    expect($unsafeSection->success)->toBeFalse()
+        ->and($unsafeSection->errors)->toHaveKey('button_url')
+        ->and($section->success)->toBeTrue()
+        ->and($unsafeItem->success)->toBeFalse()
+        ->and($unsafeItem->errors)->toHaveKey('url');
 });
 
 it('team scoping works', function (): void {

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace IvanBaric\Pages\Actions;
 
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -41,13 +43,64 @@ final class UpdatePageAction
 
         $data = $validator->validated();
         $expectedLockVersion = $this->pullExpectedLockVersion($data);
+        $originalParentId = $page->parent_id;
+        $parentChanged = false;
 
         if (($data['is_home'] ?? false) && $this->homeExists($page)) {
             return ActionResult::error(__('Naslovnica već postoji.'));
         }
 
-        $saved = DB::transaction(function () use ($page, $data, $expectedLockVersion): bool {
-            return $this->saveWithOptimisticLock($page, $data, $expectedLockVersion);
+        if (array_key_exists('parent_uuid', $data)) {
+            $parentUuid = $data['parent_uuid'];
+            unset($data['parent_uuid']);
+
+            if (($data['is_home'] ?? $page->is_home) === true) {
+                $parentUuid = null;
+            }
+
+            if ($parentUuid !== null) {
+                $parent = $page->newQuery()
+                    ->forTenant((int) $page->getAttribute('team_id'))
+                    ->where('uuid', (string) $parentUuid)
+                    ->whereKeyNot($page->getKey())
+                    ->whereNull('parent_id')
+                    ->where('is_home', false)
+                    ->first();
+
+                if (! $parent) {
+                    return ActionResult::error(__('Odabrana nadređena stranica nije dostupna.'));
+                }
+
+                if ($page->children()->exists()) {
+                    return ActionResult::error(__('Stranicu koja ima podstranice nije moguće pretvoriti u podstranicu.'));
+                }
+
+                $data['parent_id'] = $parent->getKey();
+            } else {
+                $data['parent_id'] = null;
+            }
+
+            $parentChanged = $originalParentId !== ($data['parent_id'] ?? null);
+        }
+
+        $saved = DB::transaction(function () use ($page, $data, $expectedLockVersion, $originalParentId, $parentChanged): bool {
+            $saved = $this->saveWithOptimisticLock($page, $data, $expectedLockVersion);
+
+            if (! $saved) {
+                return false;
+            }
+
+            if ($saved && ($data['is_home'] ?? false) === true) {
+                $page->children()->update(['parent_id' => null]);
+            }
+
+            if ($parentChanged) {
+                $page->refresh();
+                $this->normalizeGroup($page, $originalParentId);
+                $this->normalizeGroup($page, $page->parent_id, $page);
+            }
+
+            return true;
         });
 
         if (! $saved) {
@@ -77,6 +130,7 @@ final class UpdatePageAction
             'sort_order' => ['nullable', 'integer', 'min:0'],
             'settings' => ['nullable', 'array'],
             'lock_version' => ['nullable', 'integer', 'min:0'],
+            'parent_uuid' => ['nullable', 'uuid'],
         ];
     }
 
@@ -96,6 +150,7 @@ final class UpdatePageAction
             'published_at' => __('datum objave'),
             'sort_order' => __('redoslijed'),
             'settings' => __('postavke'),
+            'parent_uuid' => __('nadređena stranica'),
         ];
     }
 
@@ -105,5 +160,33 @@ final class UpdatePageAction
             ->where('is_home', true)
             ->whereKeyNot($page->getKey())
             ->exists();
+    }
+
+    private function normalizeGroup(Page $page, ?int $parentId, ?Page $moving = null): void
+    {
+        /** @var Collection<int, Page> $siblings */
+        $siblings = $page->newQuery()
+            ->where('team_id', $page->team_id)
+            ->when(
+                $parentId === null,
+                fn (Builder $query): Builder => $query->whereNull('parent_id'),
+                fn (Builder $query): Builder => $query->where('parent_id', $parentId),
+            )
+            ->lockForUpdate()
+            ->ordered()
+            ->get();
+
+        if ($moving) {
+            $siblings = $siblings
+                ->reject(fn (Page $sibling): bool => $sibling->is($moving))
+                ->push($moving)
+                ->values();
+        }
+
+        $siblings->each(function (Page $sibling, int $index): void {
+            if ($sibling->sort_order !== $index) {
+                $sibling->forceFill(['sort_order' => $index])->save();
+            }
+        });
     }
 }

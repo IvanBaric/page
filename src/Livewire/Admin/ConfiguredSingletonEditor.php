@@ -58,7 +58,7 @@ final class ConfiguredSingletonEditor extends Component
 
     public string $layoutVariant = '';
 
-    public function mount(Model $model, string $definitionKey): void
+    public function mount(Model $model, string $definitionKey, ?string $initialTab = null): void
     {
         $this->authorizeModel($model);
 
@@ -66,6 +66,7 @@ final class ConfiguredSingletonEditor extends Component
         $this->modelKeyName = $model->getKeyName();
         $this->modelKey = (string) $model->getKey();
         $this->definitionKey = $definitionKey;
+        $this->tab = $initialTab ?? $this->tab;
         $this->tab = $this->validTabKey($this->tab);
 
         $this->fillFromModel();
@@ -75,6 +76,15 @@ final class ConfiguredSingletonEditor extends Component
     {
         $this->authorizeWrite();
         $this->saveFormData();
+    }
+
+    public function updatedSettingsForm(): void
+    {
+        $visibleVariantKeys = collect($this->layoutVariants())->pluck('key')->map('strval')->all();
+
+        if ($visibleVariantKeys !== [] && ! in_array($this->layoutVariant, $visibleVariantKeys, true)) {
+            $this->layoutVariant = $visibleVariantKeys[0];
+        }
     }
 
     public function saveLayout(): void
@@ -122,6 +132,7 @@ final class ConfiguredSingletonEditor extends Component
         }
 
         $this->toast(true, __('Promjene su spremljene.'));
+        $this->dispatch('pages-singleton-editor-saved', definitionKey: $this->definitionKey);
     }
 
     public function removeImage(string $key): void
@@ -306,10 +317,13 @@ final class ConfiguredSingletonEditor extends Component
     /** @return array<int, array<string, mixed>> */
     public function layoutVariants(): array
     {
-        return array_map(
+        return array_values(array_map(
             static fn (LayoutVariant $variant): array => $variant->toArray(),
-            $this->layoutTab()?->variantsValue() ?? [],
-        );
+            array_filter(
+                $this->layoutTab()?->variantsValue() ?? [],
+                fn (LayoutVariant $variant): bool => $this->isConditionVisible($variant->optionValue('visible_when')),
+            ),
+        ));
     }
 
     public function render(): View
@@ -764,7 +778,35 @@ final class ConfiguredSingletonEditor extends Component
             'fit' => $field->optionValue('fit'),
             'options' => $this->fieldOptions($field),
             'picker' => $this->iconPickerEnabled($field),
+            'visible' => $this->isConditionVisible($field->optionValue('visible_when')),
+            'reactive' => $this->fieldHasDependents($field->key()),
         ];
+    }
+
+    private function isConditionVisible(mixed $condition): bool
+    {
+        if (! is_array($condition) || ! filled($condition['field'] ?? null)) {
+            return true;
+        }
+
+        return data_get($this->settingsForm, (string) $condition['field']) === ($condition['value'] ?? null);
+    }
+
+    private function fieldHasDependents(string $fieldKey): bool
+    {
+        foreach ($this->settingsTab()?->fieldsValue() ?? [] as $field) {
+            if ((string) data_get($field->optionValue('visible_when'), 'field') === $fieldKey) {
+                return true;
+            }
+        }
+
+        foreach ($this->layoutTab()?->variantsValue() ?? [] as $variant) {
+            if ((string) data_get($variant->optionValue('visible_when'), 'field') === $fieldKey) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @return array<int, mixed> */

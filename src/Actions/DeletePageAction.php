@@ -37,6 +37,7 @@ final class DeletePageAction
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            $lockedPage->children()->update(['parent_id' => null]);
             $lockedPage->archive();
         });
 

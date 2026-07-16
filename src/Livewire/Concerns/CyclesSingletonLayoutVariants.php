@@ -22,6 +22,7 @@ trait CyclesSingletonLayoutVariants
     protected function cycleSingletonLayoutVariant(string $definitionKey, string $direction = 'next'): void
     {
         abort_unless(in_array($direction, ['next', 'previous'], true), 422);
+        abort_unless(corexis_actor_id() !== null, 403);
 
         $model = $this->singletonLayoutVariantModel($definitionKey);
         abort_unless($model instanceof Model && $this->singletonBelongsToCurrentTenant($model), 404);
@@ -75,7 +76,8 @@ trait CyclesSingletonLayoutVariants
     {
         $tenantId = corexis_tenant_id();
 
-        return $tenantId === null || (string) $model->getAttribute('team_id') === (string) $tenantId;
+        return $tenantId !== null
+            && (string) $model->getAttribute('team_id') === (string) $tenantId;
     }
 
     private function singletonLayoutVariantLabel(string $definitionKey, string $direction): string

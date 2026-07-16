@@ -8,6 +8,8 @@ use Illuminate\Support\Carbon;
 use IvanBaric\Pages\Actions\CreatePageAction;
 use IvanBaric\Pages\Actions\UpdatePageAction;
 use IvanBaric\Pages\Models\Page;
+use IvanBaric\Pages\Support\PagesModels;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 
@@ -38,6 +40,8 @@ final class PageForm extends Component
     public ?string $published_at = null;
 
     public int $sort_order = 0;
+
+    public ?string $parent_uuid = null;
 
     public ?int $lock_version = null;
 
@@ -107,6 +111,7 @@ final class PageForm extends Component
         $this->is_published = $page->is_published;
         $this->published_at = $page->published_at?->format('Y-m-d\TH:i');
         $this->sort_order = $page->sort_order;
+        $this->parent_uuid = $page->parent?->uuid;
         $this->lock_version = $page->getLockVersion();
     }
 
@@ -125,7 +130,33 @@ final class PageForm extends Component
             'is_published' => $this->is_published,
             'published_at' => $this->published_at ? Carbon::parse($this->published_at) : null,
             'sort_order' => $this->sort_order,
+            'parent_uuid' => filled($this->parent_uuid) ? $this->parent_uuid : null,
             'lock_version' => $this->lock_version,
         ];
+    }
+
+    /** @return array<int, array{uuid: string, label: string}> */
+    #[Computed]
+    public function parentPageOptions(): array
+    {
+        $model = PagesModels::page();
+        $tenantId = corexis_tenant_id();
+
+        if (! is_numeric($tenantId)) {
+            return [];
+        }
+
+        return $model::query()
+            ->forTenant((int) $tenantId)
+            ->whereNull('parent_id')
+            ->where('is_home', false)
+            ->when($this->page?->exists, fn ($query) => $query->whereKeyNot($this->page->getKey()))
+            ->ordered()
+            ->get()
+            ->map(fn (Page $page): array => [
+                'uuid' => (string) $page->uuid,
+                'label' => $page->localized('title') ?: (string) $page->slug,
+            ])
+            ->all();
     }
 }

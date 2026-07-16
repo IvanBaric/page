@@ -205,6 +205,77 @@ Tab::settings(__('Postavke'))
     ]);
 ```
 
+## Dynamic Checkbox Lists
+
+Use `Field::checkboxList()` when a section setting stores multiple values whose
+options come from another module or from tenant-owned data. Keep the field
+definition declarative and resolve the options through a provider class.
+
+```php
+use Illuminate\Database\Eloquent\Model;
+use IvanBaric\Pages\Admin\Contracts\FieldOptionsProvider;
+use IvanBaric\Pages\Admin\Field;
+
+final class TopicOptions implements FieldOptionsProvider
+{
+    public function options(Model $context, Field $field): array
+    {
+        $teamId = $context->getAttribute('team_id');
+
+        // Providers must explicitly scope every query to the context tenant.
+        return Topic::query()
+            ->where('team_id', $teamId)
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Topic $topic): array => [
+                'value' => $topic->uuid,
+                'label' => $topic->name,
+                'description' => $topic->description,
+                'group_key' => 'topics',
+                'group_label' => __('Teme'),
+                'group_description' => __('Dostupne teme sadržaja.'),
+                'group_type' => 'tags',
+            ])
+            ->all();
+    }
+}
+
+Field::checkboxList('topic_uuids')
+    ->label(__('Teme'))
+    ->default([])
+    ->optionsProvider(TopicOptions::class)
+    ->storage('settings.topic_uuids');
+```
+
+Fields and tabs may depend on another settings field. The controlling field is
+automatically rendered with a live binding so dependent UI updates immediately.
+
+```php
+Field::select('content_source')
+    ->options([
+        ['value' => 'all', 'label' => __('Sve')],
+        ['value' => 'taxonomy', 'label' => __('Prema kategoriji ili oznaci')],
+    ])
+    ->default('all')
+    ->storage('settings.content_source');
+
+Field::checkboxList('taxonomy_item_uuids')
+    ->visibleWhen('content_source', 'taxonomy')
+    ->storage('settings.taxonomy_item_uuids');
+
+Tab::view(__('Fotografije'), 'project::section-photos', 'photos')
+    ->visibleWhen('content_source', 'direct');
+```
+
+Conditions compare strict stored values. They control editor visibility only;
+submitted values are still server-side validated and public renderers must
+allowlist the selected mode independently.
+
+The editor validates every submitted value against the provider result. Values
+that no longer exist are removed when the form is initialized. Providers must
+not rely only on a client-supplied model identifier: compare the model tenant to
+the current tenant and return no options when they do not match.
+
 ## Singleton Settings Editor
 
 Use `ConfiguredSingletonEditor` for a single settings object on an arbitrary model.
@@ -339,6 +410,23 @@ Known item field keys mapped to `ConfiguredSectionItemForm`:
 
 ## Tabs
 
+### Livewire source editors
+
+Za sadržaj kojim upravlja drugi modul koristite deklarativni Livewire tab. Pages paket renderira registrirani Livewire alias i ne ovisi o konkretnoj klasi modula:
+
+```php
+Tab::livewire(__('Sadržaj'), 'blog.source-manager')
+    ->parameters(['mode' => 'compact']);
+```
+
+Komponenta izvornog modula odgovorna je za tenant scope, autorizaciju, validaciju i spremanje. Nakon uspješne promjene treba emitirati zajednički događaj koji javnoj stranici omogućuje ciljano osvježavanje:
+
+```php
+$this->dispatch('pages-public-content-source-updated', source: 'posts');
+```
+
+Statički parametri iz `parameters()` prosljeđuju se komponenti pri mountu. Server-owned parametri u ciljnoj komponenti moraju biti `#[Locked]` prema Corexis sigurnosnom standardu.
+
 Available tab factories:
 
 - `Tab::items('Sadržaj')` for `section_items`.
@@ -443,6 +531,7 @@ saving needs extra behavior such as gallery media handling:
 - `gallery`
 - `featured_news`
 - `latest_news`
+- `taxonomy_news`
 - `testimonials`
 - `faq`
 - `features`

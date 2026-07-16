@@ -28,14 +28,12 @@
         </div>
 
         @if ($recordCount === 0)
-            <div class="admin-empty">
-                <div class="admin-empty-icon">
-                    <flux:icon icon="archive-box" class="size-6" />
-                </div>
-
-                <h3 class="admin-empty-title">{{ __('Arhiva je prazna') }}</h3>
-                <p class="admin-empty-description">{{ __('Nema arhiviranih stranica, sekcija ili zapisa za trenutnu pretragu.') }}</p>
-            </div>
+            <x-admin-ui::empty-state
+                :title="__('Arhiva je prazna')"
+                :description="__('Nema arhiviranih stranica, sekcija ili zapisa za trenutnu pretragu.')"
+            >
+                <x-slot:icon><flux:icon name="archive-box" class="size-6" /></x-slot:icon>
+            </x-admin-ui::empty-state>
         @else
             <div class="admin-list-header hidden grid-cols-[minmax(0,1fr)_10rem_9rem_11rem] lg:grid">
                 <span>{{ __('Zapis') }}</span>

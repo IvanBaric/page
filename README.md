@@ -105,6 +105,154 @@ $features->addItem([
 $page->publish();
 ```
 
+## Hierarchical Pages
+
+Pages supports one level of tenant-scoped subpages. Run the package migrations to add the nullable self-referencing `parent_id` column and its tenant/navigation index.
+
+```php
+$parent = Page::forSlug('about');
+$child = Page::forSlug('team');
+
+$child->parent()->associate($parent)->save();
+$parent->children()->get();
+```
+
+User-driven hierarchy changes must use `MovePageAction`, which authorizes the page, locks both navigation groups, prevents cross-tenant or second-level nesting and normalizes sort order:
+
+```php
+$result = app(\IvanBaric\Pages\Actions\MovePageAction::class)->handle(
+    page: $child->uuid,
+    parentUuid: $parent->uuid,
+    position: 0,
+);
+```
+
+The home page always remains in the root navigation. A page that already has children cannot become a child. Archiving a parent promotes its children to the root so published content does not become unreachable. `PageStructureFlyout` supports drag/reorder between root and parent groups and dispatches `pages-public-structure-updated` after a successful write, allowing headers to refresh without a hard page reload.
+
+Public navigation is returned as root pages with ordered `children`; concrete templates decide how desktop dropdowns and mobile disclosure menus are rendered.
+
+## Configurable Public Site
+
+Pages provides a reusable public page pipeline in addition to the admin and public-first editors:
+
+- `PublicSiteSubjectResolver` resolves a public owner and tenant from the URL.
+- `PublicSitePageResolver` resolves the published page, visible sections and hierarchical navigation.
+- `PublicPageController` renders the configured view without depending on an application Organization model.
+- `PublicContentController` resolves the same subject, page and navigation for nested single-content URLs.
+- `PublicContentProvider` lets Blog, Gallery, a catalog package or the host render records owned by that domain.
+- `PublicPageViewTracker` is an optional adapter contract; the default implementation does nothing.
+- `pages::public-site.page` renders the page through Template Engine and mounts editors only for an authorized actor from the same tenant.
+
+Public routes are disabled by default because the page route is commonly a final catch-all route. Enable package route registration or connect the controller manually after content-specific routes:
+
+```php
+'public_site' => [
+    'enabled' => true,
+    'layout' => 'layouts.public',
+    'subject' => [
+        'model' => App\Models\Organization::class,
+        'slug_column' => 'slug',
+        'tenant_column' => 'team_id',
+        'active_column' => 'is_active',
+    ],
+    'route' => [
+        'enabled' => true,
+        'uri' => '/{organizationSlug}/{pageSlug?}',
+        'name' => 'public.organization.page',
+        'middleware' => ['web'],
+        'subject_parameter' => 'organizationSlug',
+        'page_parameter' => 'pageSlug',
+    ],
+    'content_route' => [
+        'enabled' => true,
+        'uri' => '/{organizationSlug}/{pageSlug}/{contentSlug}',
+        'name' => 'public.organization.content',
+        'middleware' => ['web'],
+        'content_parameter' => 'contentSlug',
+    ],
+    'content_providers' => [
+        'posts' => App\Support\PublicPostContentProvider::class,
+        'gallery' => App\Support\PublicGalleryContentProvider::class,
+    ],
+],
+```
+
+Content providers are selected by stable `page_key`, with the page slug as a fallback. A provider receives a tenant-safe `PublicContentContext` containing the resolved subject, published page, public navigation and content slug:
+
+```php
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\Request;
+use IvanBaric\Pages\Contracts\PublicContentProvider;
+use IvanBaric\Pages\Data\PublicContentContext;
+
+final class PublicPostContentProvider implements PublicContentProvider
+{
+    public function render(Request $request, PublicContentContext $context): View
+    {
+        $post = Post::query()
+            ->forTenant($context->subject->tenantId)
+            ->published()
+            ->where('slug', $context->contentSlug)
+            ->firstOrFail();
+
+        return view('public.posts.show', [
+            'subject' => $context->subject->model,
+            'page' => $context->page,
+            'publicPages' => $context->publicPages,
+            'post' => $post,
+        ]);
+    }
+}
+```
+
+The package registers the content route before its final page catch-all route. When a host has taxonomy or other more specific public routes, keep both package routes disabled and manually connect `PublicContentController` and `PublicPageController` in the required order. Concrete templates, headers, footers and domain record queries remain configurable integrations and are not hardcoded in Pages.
+
+## Public Management Registry
+
+Pages can provide the authenticated public-site management flyout without hardcoding project components. Enable it and register panels in configuration:
+
+```php
+'public_management' => [
+    'enabled' => true,
+    'event' => 'pages-open-public-management',
+    'panels' => [
+        'organization' => [
+            'title' => 'Organization',
+            'icon' => 'building-office-2',
+            'permission' => 'pages.update',
+            'component' => App\Livewire\OrganizationEditor::class,
+        ],
+        'pages' => [
+            'title' => 'Pages',
+            'icon' => 'document-text',
+            'permission' => 'pages.view',
+            'event' => 'pages-open-public-page-structure',
+        ],
+        'usage' => [
+            'title' => 'Usage',
+            'icon' => 'circle-stack',
+            'permission' => 'pages.view',
+            'view' => 'public-management.usage',
+            'data_provider' => App\Support\UsagePanelData::class,
+        ],
+    ],
+],
+```
+
+Each panel defines exactly one presentation path: a Livewire `component`, a server-side `view`, or an `event`. View panels may use a `PublicManagementPanelDataProvider`. Browser panel keys are re-resolved through `PublicManagementRegistry`, and configured permissions are authorized before rendering.
+
+Mount the packaged component only for an authenticated actor viewing its own tenant:
+
+```blade
+<livewire:pages.public.management-flyout />
+```
+
+## Configured Editor Safety
+
+Configured section editors support dynamic checkbox options, conditional fields/tabs/layout variants and reusable Livewire or form tabs. Required settings receive their schema default when an older section has no stored value.
+
+Gallery sections receive an additional data-loss guard. When a section changes from directly attached photographs to existing gallery albums, the editor lists hidden direct media and requires the user to keep or delete those files explicitly. If files are kept, a persistent warning remains visible while the album source is active. Deletion is delegated to Gallery's authorized `DeleteGalleryMediaAction`.
+
 Fetch the home page with visible sections:
 
 ```php
@@ -216,6 +364,7 @@ Existing packages should continue to own their responsibilities:
 - `settings`: settings
 - `language`: languages and translations
 - `audit`: audit logging
+- `template-engine`: template registration, schema and concrete page rendering boundary
 
 ## Testing
 

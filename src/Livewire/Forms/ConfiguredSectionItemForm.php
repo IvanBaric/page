@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace IvanBaric\Pages\Livewire\Forms;
 
 use Illuminate\Validation\ValidationException;
+use IvanBaric\Corexis\Rules\SafePublicUrl;
 use IvanBaric\Pages\Models\Section;
 use IvanBaric\Pages\Models\SectionItem;
 use IvanBaric\Pages\Support\YouTubeVideo;
@@ -48,16 +49,16 @@ final class ConfiguredSectionItemForm extends Form
     public array $customData = [];
 
     /** @var array<int, string> */
-    public array $customFieldKeys = [];
+    protected array $customFieldKeys = [];
 
-    /** @var array<string, array<int, string>> */
-    public array $customRules = [];
-
-    /** @var array<string, string> */
-    public array $customValidationAttributes = [];
+    /** @var array<string, array<int, mixed>> */
+    protected array $customRules = [];
 
     /** @var array<string, string> */
-    public array $customMessages = [];
+    protected array $customValidationAttributes = [];
+
+    /** @var array<string, string> */
+    protected array $customMessages = [];
 
     /** @return array<string, mixed> */
     public function rules(): array
@@ -69,10 +70,10 @@ final class ConfiguredSectionItemForm extends Form
             'imageUpload' => corexis_image_upload()->rules(),
             'removeImage' => ['boolean'],
             'icon' => ['nullable', 'string', 'max:255'],
-            'url' => ['nullable', 'url', 'max:2048'],
+            'url' => ['nullable', 'string', 'max:2048', new SafePublicUrl],
             'youtubeUrl' => ['nullable', 'url', 'max:2048'],
             'buttonLabel' => ['nullable', 'string', 'max:255'],
-            'buttonUrl' => ['nullable', 'string', 'max:2048'],
+            'buttonUrl' => ['nullable', 'string', 'max:2048', new SafePublicUrl],
             'visible' => ['boolean'],
             'sortOrder' => ['integer', 'min:0'],
             'metaValue' => ['nullable', 'string', 'max:255'],
@@ -109,7 +110,7 @@ final class ConfiguredSectionItemForm extends Form
     }
 
     /**
-     * @param  array<string, array<int, string>>  $rules
+     * @param  array<string, array<int, mixed>>  $rules
      * @param  array<string, string>  $attributes
      * @param  array<string, string>  $messages
      */

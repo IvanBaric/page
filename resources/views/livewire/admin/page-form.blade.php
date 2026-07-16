@@ -29,6 +29,14 @@
             </flux:select>
             <flux:input wire:model="published_at" :label="__('Datum objave')" type="datetime-local" />
             <flux:input wire:model="sort_order" :label="__('Redoslijed')" type="number" min="0" />
+            @if (! $is_home)
+                <flux:select wire:model="parent_uuid" variant="listbox" :label="__('Nadređena stranica')" :description="__('Podstranica se prikazuje u padajućem izborniku nadređene stranice.')">
+                    <flux:select.option value="">{{ __('Glavna razina') }}</flux:select.option>
+                    @foreach ($this->parentPageOptions as $option)
+                        <flux:select.option :value="$option['uuid']">{{ $option['label'] }}</flux:select.option>
+                    @endforeach
+                </flux:select>
+            @endif
             <flux:checkbox wire:model="is_home" :label="__('Naslovnica')" />
             <flux:checkbox wire:model="is_published" :label="__('Objavljeno')" />
         </div>

@@ -9,6 +9,7 @@ use Illuminate\Validation\Rule;
 use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Events\PageCreated;
+use IvanBaric\Pages\Models\Page;
 use IvanBaric\Pages\Support\PagesModels;
 
 final class CreatePageAction
@@ -35,6 +36,23 @@ final class CreatePageAction
             return ActionResult::error(__('Naslovnica već postoji.'));
         }
 
+        $parentUuid = $data['parent_uuid'] ?? null;
+        unset($data['parent_uuid']);
+
+        if (($data['is_home'] ?? false) === true) {
+            $parentUuid = null;
+        }
+
+        if ($parentUuid !== null) {
+            $parent = $this->resolveParent((string) $parentUuid, $data['team_id'] ?? corexis_tenant_id());
+
+            if (! $parent) {
+                return ActionResult::error(__('Odabrana nadređena stranica nije dostupna.'));
+            }
+
+            $data['parent_id'] = $parent->getKey();
+        }
+
         $model = PagesModels::page();
         $page = $model::query()->create($data);
 
@@ -59,6 +77,7 @@ final class CreatePageAction
             'published_at' => ['nullable', 'date'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
             'settings' => ['nullable', 'array'],
+            'parent_uuid' => ['nullable', 'uuid'],
         ];
     }
 
@@ -78,6 +97,7 @@ final class CreatePageAction
             'published_at' => __('datum objave'),
             'sort_order' => __('redoslijed'),
             'settings' => __('postavke'),
+            'parent_uuid' => __('nadređena stranica'),
         ];
     }
 
@@ -86,5 +106,21 @@ final class CreatePageAction
         $model = PagesModels::page();
 
         return $model::query()->where('is_home', true)->exists();
+    }
+
+    private function resolveParent(string $uuid, mixed $tenantId): ?Page
+    {
+        if (! is_numeric($tenantId)) {
+            return null;
+        }
+
+        $model = PagesModels::page();
+
+        return $model::query()
+            ->forTenant((int) $tenantId)
+            ->where('uuid', $uuid)
+            ->whereNull('parent_id')
+            ->where('is_home', false)
+            ->first();
     }
 }

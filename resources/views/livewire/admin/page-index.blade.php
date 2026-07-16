@@ -30,12 +30,14 @@
                 <flux:button
                     type="button"
                     variant="primary"
-                    icon="check"
                     x-on:click="saving = true"
                     x-bind:disabled="saving"
                     wire:click="$dispatch('pages-save-singleton-editor')"
                 >
-                    <span x-show="! saving">{{ __('Spremi promjene') }}</span>
+                    <span x-show="! saving" class="inline-flex items-center gap-2">
+                        <flux:icon name="check" class="size-4 shrink-0" />
+                        <span>{{ __('Spremi promjene') }}</span>
+                    </span>
                     <span x-cloak x-show="saving" class="inline-flex items-center gap-2">
                         <span class="admin-submit-spinner" aria-hidden="true"></span>
                         <span>{{ __('Spremanje...') }}</span>
@@ -153,7 +155,7 @@
                                     <flux:menu.item as="button" type="button" wire:click="editPage('{{ $page->uuid }}')" icon="pencil-square">
                                         {{ __('Promijeni naziv') }}
                                     </flux:menu.item>
-                                    <flux:menu.item :href="$this->publicPageUrl($page)" target="_blank" icon="eye">
+                                    <flux:menu.item :href="$this->publicPageUrl($page)" target="_blank" rel="noopener noreferrer" icon="eye">
                                         {{ __('Javni prikaz') }}
                                     </flux:menu.item>
                                     @if ($this->canDeletePage($page))
@@ -193,6 +195,12 @@
                 </div>
 
                 <flux:input wire:model="newPageTitle" :label="__('Naziv stranice')" :placeholder="__('Npr. Projekti, Radionice ili Donacije')" data-required autofocus />
+                <flux:select wire:model="newPageParentUuid" variant="listbox" :label="__('Nadređena stranica')" :description="__('Ostavite prazno za stavku glavnog izbornika.')">
+                    <flux:select.option value="">{{ __('Glavna razina') }}</flux:select.option>
+                    @foreach ($this->parentPageOptions as $option)
+                        <flux:select.option :value="$option['uuid']">{{ $option['label'] }}</flux:select.option>
+                    @endforeach
+                </flux:select>
 
                 <div class="flex justify-end gap-2">
                     <flux:modal.close>
@@ -214,6 +222,12 @@
                 <div class="grid gap-5">
                     <flux:input wire:model="pageTitle" :label="__('Naziv stranice')" data-required autofocus />
                     <flux:textarea wire:model="pageExcerpt" :label="__('Kratki opis')" rows="3" />
+                    <flux:select wire:model="pageParentUuid" variant="listbox" :label="__('Nadređena stranica')" :description="__('Podstranica će se prikazati u padajućem izborniku nadređene stranice.')">
+                        <flux:select.option value="">{{ __('Glavna razina') }}</flux:select.option>
+                        @foreach ($this->parentPageOptions as $option)
+                            <flux:select.option :value="$option['uuid']">{{ $option['label'] }}</flux:select.option>
+                        @endforeach
+                    </flux:select>
                 </div>
 
                 <div class="flex justify-end gap-2">

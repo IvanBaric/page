@@ -70,6 +70,12 @@ final class Tab
         return (new self($key, 'livewire', $label))->option('component', $component);
     }
 
+    /** @param array<string, mixed> $parameters */
+    public function parameters(array $parameters): self
+    {
+        return $this->option('parameters', $parameters);
+    }
+
     /** @param array<string, mixed> $data */
     public static function fromArray(array $data): self
     {
@@ -182,6 +188,14 @@ final class Tab
     public function default(mixed $value): self
     {
         return $this->option('default', $value);
+    }
+
+    public function visibleWhen(string $field, mixed $value): self
+    {
+        return $this->option('visible_when', [
+            'field' => $field,
+            'value' => $value,
+        ]);
     }
 
     /** @param array<int, Field> $fields */

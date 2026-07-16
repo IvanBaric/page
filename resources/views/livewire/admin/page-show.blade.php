@@ -1,4 +1,5 @@
 <section class="admin-page">
+    @unless ($embedded)
     <x-admin-ui::page-header
         :title="$page->localized('title')"
         :description="__('Složite sadržaj stranice, promijenite redoslijed sekcija, kopirajte ili premjestite postojeće blokove.')"
@@ -15,6 +16,13 @@
             <flux:button type="button" wire:click="openSectionCreator" wire:loading.attr="disabled" wire:target="openSectionCreator" variant="primary" icon="plus">{{ __('Dodaj sekciju') }}</flux:button>
         </x-slot:actions>
     </x-admin-ui::page-header>
+    @endunless
+
+    @if ($embedded)
+        <div class="mb-4 flex justify-end">
+            <flux:button type="button" wire:click="openSectionCreator" variant="primary" size="sm" icon="plus">{{ __('Dodaj sekciju') }}</flux:button>
+        </div>
+    @endif
 
     <x-admin-ui::panel loading loading-target="toggle,reorderSection,addSelectedSection,copySection,moveSection,delete" loading-text="{{ __('Ažuriram sekcije...') }}">
         <div class="admin-panel-header">
@@ -96,10 +104,19 @@
         @endif
     </x-admin-ui::panel>
 
+    @teleport('body')
+    <div>
+    @if ($publicActions)
+        <x-admin-ui::action-loading
+            target="__dispatch"
+            :text="__('Učitavanje...')"
+        />
+    @endif
+
     <flux:modal name="section-create" x-on:close="$wire.cancelSectionCreator()" class="w-[calc(100vw-2rem)] max-w-6xl lg:w-[72rem]">
         @php($selectedSection = $this->selectedSectionDetails)
 
-        <form wire:submit="addSelectedSection" wire:loading.class="admin-panel-content-loading" wire:target="addSelectedSection" class="relative flex h-[min(78vh,38rem)] flex-col gap-6 overflow-hidden">
+        <form wire:submit="addSelectedSection" wire:loading.class="admin-panel-content-loading" wire:target="addSelectedSection" class="relative flex h-[min(82vh,38rem)] flex-col gap-5 overflow-hidden sm:gap-6">
             <x-admin-ui::loading-overlay target="addSelectedSection" :text="__('Spremanje...')" />
             <div class="shrink-0">
                 <div>
@@ -108,15 +125,15 @@
                 </div>
             </div>
 
-            <div class="grid min-h-0 flex-1 grid-rows-[12rem_minmax(0,1fr)] gap-5 lg:grid-cols-[18rem_minmax(0,1fr)] lg:grid-rows-none">
-                <div class="min-h-0 overflow-y-auto rounded-xl border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-800 dark:bg-zinc-900/70">
-                    <div class="grid gap-1">
+            <div class="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] lg:grid-rows-none lg:gap-5">
+                <div class="min-h-0 overflow-x-auto rounded-xl border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-800 dark:bg-zinc-900/70 lg:overflow-x-hidden lg:overflow-y-auto">
+                    <div class="flex gap-1 lg:grid">
                         @forelse ($this->sectionCreatorEntries as $option)
                             <button
                                 type="button"
                                 wire:click="selectSectionCreatorEntry('{{ $option['key'] }}')"
                                 @class([
-                                    'block w-full cursor-pointer rounded-lg px-3 py-2.5 text-left text-sm font-semibold leading-5 transition',
+                                    'block shrink-0 cursor-pointer whitespace-nowrap rounded-lg px-3 py-2.5 text-left text-sm font-semibold leading-5 transition lg:w-full lg:whitespace-normal',
                                     'bg-white text-zinc-950 shadow-sm ring-1 ring-pink-200 dark:bg-zinc-950 dark:text-white dark:ring-pink-500/40' => $selectedSectionCreatorKey === $option['key'],
                                     'text-zinc-700 hover:bg-white hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-950 dark:hover:text-white' => $selectedSectionCreatorKey !== $option['key'],
                                 ])
@@ -131,7 +148,7 @@
                     </div>
                 </div>
 
-                <div class="min-h-0 overflow-hidden rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
+                <div class="min-h-0 overflow-y-auto rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950 sm:p-5">
                     @if ($selectedSection)
                         <div class="flex h-full min-h-0 flex-col gap-5">
                             <div class="shrink-0 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -274,6 +291,26 @@
         </form>
     </flux:modal>
 
+    @unless ($embedded && $publicActions)
+        <flux:modal name="section-duplicate" x-on:close="$wire.cancelDuplicate()" class="max-w-lg">
+            <form wire:submit="duplicateSection" wire:loading.class="admin-panel-content-loading" wire:target="duplicateSection" class="relative space-y-6">
+                <x-admin-ui::loading-overlay target="duplicateSection" :text="__('Dupliciranje...')" />
+
+                <div>
+                    <flux:heading size="lg">{{ __('Duplicirati sekciju?') }}</flux:heading>
+                    <flux:text class="mt-2">{{ __('Nova sekcija bit će dodana na ovu stranicu sa svim sadržajem, slikama i postavkama izvorne sekcije.') }}</flux:text>
+                </div>
+
+                <div class="flex justify-end gap-2">
+                    <flux:modal.close>
+                        <flux:button type="button" variant="ghost">{{ __('Odustani') }}</flux:button>
+                    </flux:modal.close>
+                    <x-admin-ui::submit-button target="duplicateSection" icon="document-duplicate">{{ __('Dupliciraj sekciju') }}</x-admin-ui::submit-button>
+                </div>
+            </form>
+        </flux:modal>
+    @endunless
+
     <flux:modal name="section-copy" x-on:close="$wire.cancelCopy()" class="max-w-lg">
         <form wire:submit="copySection" wire:loading.class="admin-panel-content-loading" wire:target="copySection" class="relative space-y-6">
             <x-admin-ui::loading-overlay target="copySection" :text="__('Spremanje...')" />
@@ -346,4 +383,6 @@
             </div>
         </div>
     </flux:modal>
+    </div>
+    @endteleport
 </section>

@@ -27,12 +27,22 @@ use IvanBaric\Pages\Support\OnePageNavigation;
 use IvanBaric\Pages\Support\PagesModels;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
+use Livewire\Attributes\On;
 use Livewire\Component;
 
 class PageShow extends Component
 {
     #[Locked]
     public Page $page;
+
+    #[Locked]
+    public bool $embedded = false;
+
+    #[Locked]
+    public bool $publicActions = false;
+
+    #[Locked]
+    public ?string $publicActionDialog = null;
 
     #[Locked]
     public ?string $deletingUuid = null;
@@ -42,6 +52,9 @@ class PageShow extends Component
 
     #[Locked]
     public ?string $copyingUuid = null;
+
+    #[Locked]
+    public ?string $duplicatingUuid = null;
 
     #[Locked]
     public ?string $movingUuid = null;
@@ -56,7 +69,7 @@ class PageShow extends Component
 
     public SectionSettingsForm $form;
 
-    public function mount(Page $page): void
+    public function mount(Page $page, bool $embedded = false, bool $publicActions = false): void
     {
         $pageModel = PagesModels::page();
         $page = $pageModel::query()
@@ -66,12 +79,29 @@ class PageShow extends Component
         abort_unless($page instanceof Page, 404);
 
         $this->page = $page;
+        $this->embedded = $embedded;
+        $this->publicActions = $publicActions;
+
+        if ($this->isPublicActionHandler()) {
+            $tenantId = corexis_tenant_id();
+
+            abort_unless(corexis_actor_id() !== null && is_numeric($tenantId), 403);
+            abort_unless((string) $this->page->getAttribute('team_id') === (string) $tenantId, 404);
+            corexis_authorize('pages.update', $this->page);
+
+            return;
+        }
+
         $this->selectedSectionType = $this->firstAvailableSectionType();
         $this->selectedSectionCreatorKey = $this->firstAvailableSectionCreatorKey();
     }
 
     public function openSectionCreator(): void
     {
+        if ($this->isPublicActionHandler()) {
+            $this->publicActionDialog = 'create';
+        }
+
         if (! $this->isAvailableSectionCreatorKey($this->selectedSectionCreatorKey)) {
             $this->selectedSectionCreatorKey = $this->firstAvailableSectionCreatorKey();
         }
@@ -79,8 +109,57 @@ class PageShow extends Component
         Flux::modal('section-create')->show();
     }
 
+    #[On('pages-open-public-section-creator')]
+    public function openPublicSectionCreator(): void
+    {
+        abort_unless($this->embedded && $this->publicActions, 404);
+
+        $this->openSectionCreator();
+    }
+
+    #[On('pages-public-section-action')]
+    public function handlePublicSectionAction(string $action, string $sectionUuid): void
+    {
+        abort_unless($this->embedded && $this->publicActions, 404);
+        $section = $this->findSection($sectionUuid);
+
+        if ($action === 'up' || $action === 'down') {
+            $sections = $this->page->sections()->ordered()->get()->values();
+            $index = $sections->search(fn (Section $candidate): bool => $candidate->is($section));
+
+            if ($index === false) {
+                return;
+            }
+
+            $target = $action === 'up' ? max(0, $index - 1) : min($sections->count() - 1, $index + 1);
+
+            if ($target !== $index) {
+                $this->reorderSection($sectionUuid, $target, app(ReorderSectionsAction::class));
+            }
+
+            return;
+        }
+
+        match ($action) {
+            'copy' => $this->confirmCopy($sectionUuid),
+            'move' => $this->confirmMove($sectionUuid),
+            'archive' => $this->confirmDelete($sectionUuid),
+            default => abort(404),
+        };
+    }
+
     public function cancelSectionCreator(): void
     {
+        $this->closePublicActionDialog('create');
+
+        if ($this->isPublicActionHandler()) {
+            $this->selectedSectionType = '';
+            $this->selectedSectionCreatorKey = '';
+            unset($this->sectionCreatorSections, $this->sectionCreatorEntries, $this->selectedSectionDetails);
+
+            return;
+        }
+
         $this->selectedSectionType = $this->firstAvailableSectionType();
         $this->selectedSectionCreatorKey = $this->firstAvailableSectionCreatorKey();
         unset($this->selectedSectionDetails);
@@ -147,8 +226,10 @@ class PageShow extends Component
 
         unset($this->sections, $this->sectionCreatorSections, $this->sectionCreatorEntries, $this->selectedSectionDetails);
 
+        $this->closePublicActionDialog('create');
         Flux::modal('section-create')->close();
         Flux::toast(variant: 'success', text: __('Sekcija je dodana.'));
+        $this->structureChanged();
     }
 
     public function toggle(string $uuid, ToggleSectionVisibilityAction $action): void
@@ -158,6 +239,7 @@ class PageShow extends Component
 
         unset($this->sections);
         $this->toastFromResult($result);
+        $this->structureChanged();
     }
 
     public function reorderSection(string $uuid, int $position, ReorderSectionsAction $action): void
@@ -175,6 +257,7 @@ class PageShow extends Component
 
         unset($this->sections);
         $this->toastFromResult($result);
+        $this->structureChanged();
     }
 
     public function edit(string $uuid): void
@@ -222,23 +305,27 @@ class PageShow extends Component
 
         Flux::modal('section-form')->close();
         Flux::toast(variant: 'success', text: __('Sekcija je uspješno spremljena.'));
+        $this->structureChanged();
     }
 
     public function confirmDelete(string $uuid): void
     {
         $this->deletingUuid = (string) $this->findSection($uuid)->uuid;
+        $this->publicActionDialog = $this->isPublicActionHandler() ? 'archive' : null;
         Flux::modal('section-delete')->show();
     }
 
     public function cancelDelete(): void
     {
         $this->deletingUuid = null;
+        $this->closePublicActionDialog('archive');
     }
 
     public function confirmCopy(string $uuid): void
     {
         $this->copyingUuid = (string) $this->findSection($uuid)->uuid;
         $this->copyTargetPageUuid = (string) $this->page->getAttribute('uuid');
+        $this->publicActionDialog = $this->isPublicActionHandler() ? 'copy' : null;
         Flux::modal('section-copy')->show();
     }
 
@@ -246,12 +333,44 @@ class PageShow extends Component
     {
         $this->copyingUuid = null;
         $this->copyTargetPageUuid = null;
+        $this->closePublicActionDialog('copy');
+    }
+
+    public function confirmDuplicate(string $uuid): void
+    {
+        $this->duplicatingUuid = (string) $this->findSection($uuid)->uuid;
+        Flux::modal('section-duplicate')->show();
+    }
+
+    public function cancelDuplicate(): void
+    {
+        $this->duplicatingUuid = null;
+    }
+
+    public function duplicateSection(CopySectionAction $action): void
+    {
+        $source = $this->findSection((string) $this->duplicatingUuid);
+        $result = $action->handle($source, $this->page);
+
+        if (! $this->resultSuccessful($result)) {
+            $this->toastFromResult($result);
+
+            return;
+        }
+
+        $this->duplicatingUuid = null;
+        unset($this->sections);
+
+        Flux::modal('section-duplicate')->close();
+        $this->toastFromResult($result);
+        $this->structureChanged();
     }
 
     public function confirmMove(string $uuid): void
     {
         $this->movingUuid = (string) $this->findSection($uuid)->uuid;
         $this->moveTargetPageUuid = $this->defaultMoveTargetPageUuid();
+        $this->publicActionDialog = $this->isPublicActionHandler() ? 'move' : null;
         Flux::modal('section-move')->show();
     }
 
@@ -259,6 +378,7 @@ class PageShow extends Component
     {
         $this->movingUuid = null;
         $this->moveTargetPageUuid = null;
+        $this->closePublicActionDialog('move');
     }
 
     public function copySection(CopySectionAction $action): void
@@ -284,11 +404,17 @@ class PageShow extends Component
 
         $this->copyingUuid = null;
         $this->copyTargetPageUuid = null;
+        $this->closePublicActionDialog('copy');
 
         unset($this->sections);
 
         Flux::modal('section-copy')->close();
         $this->toastFromResult($result);
+        if ($this->embedded) {
+            $this->structureChanged();
+
+            return;
+        }
         $this->redirectRoute($this->pageShowRouteName(), ['page' => $targetPage->uuid], navigate: true);
     }
 
@@ -316,19 +442,29 @@ class PageShow extends Component
             return;
         }
 
+        $movedSectionUuid = (string) $source->getAttribute('uuid');
         $this->movingUuid = null;
         $this->moveTargetPageUuid = null;
+        $this->closePublicActionDialog('move');
 
         unset($this->sections, $this->copyTargetPages, $this->moveTargetPages);
 
         Flux::modal('section-move')->close();
         $this->toastFromResult($result);
+        if ($this->embedded) {
+            $this->dispatch('pages-public-section-removed.'.$movedSectionUuid);
+            $this->structureChanged(reload: false);
+
+            return;
+        }
         $this->redirectRoute($this->pageShowRouteName(), ['page' => $targetPage->uuid], navigate: true);
     }
 
     public function delete(DeleteSectionAction $action): void
     {
-        $result = $action->handle($this->findSection((string) $this->deletingUuid));
+        $section = $this->findSection((string) $this->deletingUuid);
+        $sectionUuid = (string) $section->getAttribute('uuid');
+        $result = $action->handle($section);
 
         if ($result->failed()) {
             $this->toastFromResult($result);
@@ -337,11 +473,25 @@ class PageShow extends Component
         }
 
         $this->deletingUuid = null;
+        $this->closePublicActionDialog('archive');
 
         unset($this->sections);
 
         Flux::modal('section-delete')->close();
         $this->toastFromResult($result);
+
+        if ($this->embedded) {
+            $this->dispatch('pages-public-section-removed.'.$sectionUuid);
+        }
+
+        $this->structureChanged(reload: false);
+    }
+
+    private function structureChanged(bool $reload = true): void
+    {
+        if ($this->embedded) {
+            $this->dispatch('pages-public-structure-updated', reload: $reload);
+        }
     }
 
     /** @return Collection<int, Section> */
@@ -559,8 +709,24 @@ class PageShow extends Component
 
     public function render(): View
     {
+        if ($this->isPublicActionHandler()) {
+            return view('pages::livewire.public-site.page-actions-handler');
+        }
+
         return view('pages::livewire.admin.page-show')
             ->layout('layouts.app', ['title' => $this->page->localized('title')]);
+    }
+
+    private function isPublicActionHandler(): bool
+    {
+        return $this->embedded && $this->publicActions;
+    }
+
+    private function closePublicActionDialog(string $dialog): void
+    {
+        if ($this->publicActionDialog === $dialog) {
+            $this->publicActionDialog = null;
+        }
     }
 
     private function findSection(string $uuid): Section
@@ -629,21 +795,21 @@ class PageShow extends Component
         return [
             'products' => [
                 'label' => __('Radovi'),
-                'description' => __('Radovi, istaknuti radovi i upute kako naručiti ili preuzeti učeničke rukotvorine.'),
+                'description' => __('Jedna prilagodljiva sekcija radova s filtrom te upute kako naručiti ili preuzeti učeničke rukotvorine.'),
                 'icon' => 'cube',
-                'types' => ['all_products', 'featured_products', 'how_to_order'],
+                'types' => ['all_products', 'how_to_order'],
             ],
             'galleries' => [
                 'label' => __('Galerije'),
-                'description' => __('Postojeći albumi iz Galerije ili fotografije koje dodajete izravno u jednu sekciju.'),
+                'description' => __('Jedna galerijska sekcija za postojeće albume ili fotografije učitane izravno na stranicu.'),
                 'icon' => 'photo',
-                'types' => ['gallery_grid', 'gallery', 'photo_gallery'],
+                'types' => ['gallery_grid'],
             ],
             'news' => [
                 'label' => __('Objave'),
-                'description' => __('Sve objave za stranicu Objave ili ručno odabrane objave za naslovnicu i važne blokove.'),
+                'description' => __('Jedna sekcija objava za sve, istaknute ili tematski filtrirane objave.'),
                 'icon' => 'newspaper',
-                'types' => ['latest_news', 'featured_news'],
+                'types' => ['latest_news'],
             ],
         ];
     }
@@ -822,7 +988,7 @@ class PageShow extends Component
             'features' => 'sparkles',
             'statistics' => 'chart-bar',
             'featured_products', 'all_products' => 'cube',
-            'featured_news', 'latest_news' => 'newspaper',
+            'featured_news', 'latest_news', 'taxonomy_news' => 'newspaper',
             'testimonials' => 'chat-bubble-left-right',
             'gallery', 'gallery_grid', 'photo_gallery' => 'photo',
             'video' => 'play-circle',
@@ -895,7 +1061,7 @@ class PageShow extends Component
             'features' => 'features_mosaic',
             'statistics' => 'stats_cards',
             'featured_products', 'all_products' => 'products_cards',
-            'featured_news', 'latest_news' => 'news_cards',
+            'featured_news', 'latest_news', 'taxonomy_news' => 'news_cards',
             'gallery', 'gallery_grid' => 'gallery_cards',
             'photo_gallery' => 'photo_gallery_grid',
             'video' => 'cards',

@@ -1069,13 +1069,17 @@
 @elseif ($preview === 'gallery_text_cards')
     <span class="grid h-full grid-cols-3 gap-2">
         @foreach (['bg-emerald-100', 'bg-yellow-100', 'bg-sky-100'] as $color)
-            <span class="flex flex-col rounded-md bg-white p-1.5 shadow-sm">
-                <span class="grid gap-1">
-                    <span class="h-1.5 rounded bg-zinc-900"></span>
-                    <span class="h-1.5 w-5/6 rounded bg-zinc-300"></span>
-                    <span class="h-1.5 w-1/2 rounded bg-green-300"></span>
+            <span class="flex flex-col rounded-md bg-white p-1.5 shadow-sm ring-1 ring-zinc-200/70">
+                <span class="flex items-start justify-between gap-1">
+                    <span class="grid flex-1 gap-1">
+                        <span class="h-1.5 w-4/5 rounded bg-zinc-900"></span>
+                        <span class="h-1 w-full rounded bg-zinc-300"></span>
+                        <span class="h-1 w-3/4 rounded bg-zinc-300"></span>
+                    </span>
+                    <span class="size-3 shrink-0 rounded-full bg-pink-100 ring-1 ring-pink-200"></span>
                 </span>
-                <span class="mt-1.5 block flex-1 rounded-md {{ $color }}"></span>
+                <span class="mt-1.5 h-2 w-1/2 rounded-full bg-pink-100 ring-1 ring-pink-200"></span>
+                <span class="mt-1.5 block flex-1 rounded-md {{ $color }} ring-1 ring-zinc-200/60"></span>
             </span>
         @endforeach
     </span>

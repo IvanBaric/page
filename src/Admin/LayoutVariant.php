@@ -56,6 +56,14 @@ final class LayoutVariant
         return $this;
     }
 
+    public function visibleWhen(string $field, mixed $value): self
+    {
+        return $this->option('visible_when', [
+            'field' => $field,
+            'value' => $value,
+        ]);
+    }
+
     public function key(): string
     {
         return $this->key;

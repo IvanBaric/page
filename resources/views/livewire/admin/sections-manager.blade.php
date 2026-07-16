@@ -29,6 +29,14 @@
             </x-admin-ui::submit-button>
         </div>
     </form>
+    @if ($sections->isEmpty())
+        <x-admin-ui::empty-state
+            :title="__('Nema sekcija')"
+            :description="__('Dodajte prvu sekciju kako biste počeli slagati sadržaj stranice.')"
+        >
+            <x-slot:icon><flux:icon name="squares-plus" class="size-6" /></x-slot:icon>
+        </x-admin-ui::empty-state>
+    @else
     <flux:table>
         <flux:table.columns>
             <flux:table.column>{{ __('Title') }}</flux:table.column>
@@ -38,7 +46,7 @@
             <flux:table.column>{{ __('Actions') }}</flux:table.column>
         </flux:table.columns>
         <flux:table.rows>
-            @forelse ($sections as $section)
+            @foreach ($sections as $section)
                 <flux:table.row :key="$section->uuid">
                     <flux:table.cell>{{ $section->localized('title') ?: __('Untitled section') }}</flux:table.cell>
                     <flux:table.cell>{{ __(config('pages.section_types.'.$section->type.'.label', $section->type)) }}</flux:table.cell>
@@ -53,11 +61,8 @@
                         </div>
                     </flux:table.cell>
                 </flux:table.row>
-            @empty
-                <flux:table.row>
-                    <flux:table.cell colspan="5">{{ __('No sections found.') }}</flux:table.cell>
-                </flux:table.row>
-            @endforelse
+            @endforeach
         </flux:table.rows>
     </flux:table>
+    @endif
 </section>

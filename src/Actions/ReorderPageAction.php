@@ -34,6 +34,7 @@ final class ReorderPageAction
 
         DB::transaction(function () use ($page, $position, $keys, $slugs): void {
             $pages = $page::query()
+                ->where('parent_id', $page->getAttribute('parent_id'))
                 ->when(
                     Schema::hasColumn(PagesConfigResolver::pagesTable(), 'page_key'),
                     fn ($query) => $query->where(function ($query) use ($keys, $slugs): void {
