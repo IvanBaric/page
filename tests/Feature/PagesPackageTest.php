@@ -27,6 +27,7 @@ use IvanBaric\Pages\Admin\Contracts\FieldOptionsProvider;
 use IvanBaric\Pages\Admin\Field;
 use IvanBaric\Pages\Admin\LayoutVariant;
 use IvanBaric\Pages\Admin\Tab;
+use IvanBaric\Pages\Contracts\PagePublicationGuard;
 use IvanBaric\Pages\Contracts\PublicContentProvider;
 use IvanBaric\Pages\Contracts\PublicManagementPanelDataProvider;
 use IvanBaric\Pages\Data\PublicContentContext;
@@ -930,6 +931,31 @@ it('dispatches domain events for successful page actions only', function (): voi
 
     expect($published->success)->toBeTrue();
     Event::assertDispatched(PagePublished::class);
+});
+
+it('allows the host to block publication without coupling pages to billing', function (): void {
+    Event::fake([PagePublished::class]);
+
+    $page = Page::query()->create([
+        'title' => ['en' => 'Billing draft'],
+        'status' => 'draft',
+        'is_published' => false,
+    ]);
+
+    app()->instance(PagePublicationGuard::class, new class implements PagePublicationGuard
+    {
+        public function inspect(Page $page): ?ActionResult
+        {
+            return ActionResult::error('Activate the subscription before publishing.', 'publication.blocked');
+        }
+    });
+
+    $result = app(PublishPageAction::class)->handle($page);
+
+    expect($result->success)->toBeFalse()
+        ->and($result->code)->toBe('publication.blocked')
+        ->and($page->refresh()->is_published)->toBeFalse();
+    Event::assertNotDispatched(PagePublished::class);
 });
 
 it('dispatches domain events for successful section and item actions', function (): void {

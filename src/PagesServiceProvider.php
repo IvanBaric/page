@@ -6,6 +6,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use IvanBaric\Pages\Admin\AdminSectionRegistry;
+use IvanBaric\Pages\Contracts\PagePublicationGuard;
 use IvanBaric\Pages\Contracts\PublicPageViewTracker;
 use IvanBaric\Pages\Contracts\PublicSiteSubjectResolver;
 use IvanBaric\Pages\Http\Controllers\PublicContentController;
@@ -21,6 +22,7 @@ use IvanBaric\Pages\Livewire\PublicSite\PageStructureFlyout;
 use IvanBaric\Pages\Livewire\PublicSite\PublicManagementFlyout;
 use IvanBaric\Pages\Livewire\PublicSite\SectionEditorFlyout;
 use IvanBaric\Pages\Livewire\PublicSite\TemplatePartEditorFlyout;
+use IvanBaric\Pages\Support\AllowPagePublication;
 use IvanBaric\Pages\Support\EloquentPublicSiteSubjectResolver;
 use IvanBaric\Pages\Support\NullPublicPageViewTracker;
 use IvanBaric\Pages\Support\PublicContentProviderRegistry;
@@ -50,6 +52,13 @@ final class PagesServiceProvider extends ServiceProvider
         $this->app->singleton(AdminSectionRegistry::class);
         $this->app->singleton(PublicContentProviderRegistry::class);
         $this->app->singleton(PublicManagementRegistry::class);
+        $this->app->singleton(PagePublicationGuard::class, function ($app): PagePublicationGuard {
+            $guard = config('pages.publication.guard');
+
+            return $app->make(is_string($guard) && is_a($guard, PagePublicationGuard::class, true)
+                ? $guard
+                : AllowPagePublication::class);
+        });
         $this->app->singleton(PublicSiteSubjectResolver::class, function ($app): PublicSiteSubjectResolver {
             $resolver = config('pages.public_site.subject_resolver');
 

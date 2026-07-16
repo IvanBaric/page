@@ -8,12 +8,15 @@ use Illuminate\Support\Facades\DB;
 use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
+use IvanBaric\Pages\Contracts\PagePublicationGuard;
 use IvanBaric\Pages\Events\PagePublished;
 use IvanBaric\Pages\Models\Page;
 
 final class PublishPageAction
 {
     use AuthorizesPageActions, ResolvesPageModels;
+
+    public function __construct(private readonly PagePublicationGuard $publicationGuard) {}
 
     public function handle(Page|string $page): ActionResult
     {
@@ -24,6 +27,10 @@ final class PublishPageAction
         }
 
         if ($result = $this->authorizePageAction('pages.publish', $page)) {
+            return $result;
+        }
+
+        if ($result = $this->publicationGuard->inspect($page)) {
             return $result;
         }
 

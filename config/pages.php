@@ -19,6 +19,10 @@ return [
 
     'default_status' => 'draft',
 
+    'publication' => [
+        'guard' => null,
+    ],
+
     'statuses' => [
         'draft' => ['label' => 'Skica'],
         'published' => ['label' => 'Objavljeno'],

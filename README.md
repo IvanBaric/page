@@ -338,6 +338,8 @@ Archived records use `RestoreArchivedRecordAction` and `ForceDeleteArchivedRecor
 
 `Page::publish()`, `Page::unpublish()` and each model's `archive()` method contain the state mutation itself. Actions remain the required boundary for user-driven writes because they add authorization, tenant-safe resolution, locking and domain events.
 
+`pages.publication.guard` may point to a host implementation of `PagePublicationGuard`. The guard runs after authorization and before the transaction, and may return an error `ActionResult` to block publication for billing, approval or product-lifecycle reasons. Pages does not depend on Billing or Plans.
+
 Successful Actions dispatch small domain events after the write path succeeds. Failed validation and lookup results do not dispatch success events.
 
 Current events:
