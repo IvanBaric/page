@@ -16,10 +16,14 @@ use IvanBaric\Pages\Actions\Concerns\MergesTranslatableAttributes;
 use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
 use IvanBaric\Pages\Events\PageUpdated;
 use IvanBaric\Pages\Models\Page;
+use IvanBaric\Pages\Rules\NavigationUrl;
+use IvanBaric\Pages\Support\PageHierarchy;
 
 final class UpdatePageAction
 {
     use AuthorizesPageActions, MergesTranslatableAttributes, ResolvesPageModels, UsesOptimisticLocking;
+
+    public function __construct(private readonly PageHierarchy $hierarchy) {}
 
     /**
      * @param  array<string, mixed>  $data
@@ -34,6 +38,12 @@ final class UpdatePageAction
 
         if ($result = $this->authorizePageAction('pages.update', $page)) {
             return $result;
+        }
+
+        if (($data['is_home'] ?? $page->is_home) === true) {
+            $data['navigation_type'] = 'page';
+            $data['navigation_url'] = null;
+            $data['navigation_target'] = '_self';
         }
 
         $validator = Validator::make($data, $this->rules(), attributes: $this->attributes());
@@ -68,7 +78,6 @@ final class UpdatePageAction
                     ->forTenant((int) $page->getAttribute('team_id'))
                     ->where('uuid', (string) $parentUuid)
                     ->whereKeyNot($page->getKey())
-                    ->whereNull('parent_id')
                     ->where('is_home', false)
                     ->first();
 
@@ -76,8 +85,8 @@ final class UpdatePageAction
                     return ActionResult::error(__('Odabrana nadređena stranica nije dostupna.'));
                 }
 
-                if ($page->children()->exists()) {
-                    return ActionResult::error(__('Stranicu koja ima podstranice nije moguće pretvoriti u podstranicu.'));
+                if (! $this->hierarchy->canMoveUnder($page, $parent)) {
+                    return ActionResult::error(__('Odabrano mjesto prelazi dopuštene :count razine ili pripada podstablu ove stranice.', ['count' => $this->hierarchy->maxDepth()]));
                 }
 
                 $data['parent_id'] = $parent->getKey();
@@ -129,6 +138,9 @@ final class UpdatePageAction
             'content' => ['nullable', 'array'],
             'status' => ['required', 'string', Rule::in(array_keys(config('pages.statuses', [])))],
             'template' => ['nullable', 'string', Rule::in(array_keys(config('pages.templates', [])))],
+            'navigation_type' => ['nullable', 'string', Rule::in(['page', 'url'])],
+            'navigation_url' => ['nullable', 'required_if:navigation_type,url', 'string', 'max:2048', new NavigationUrl],
+            'navigation_target' => ['nullable', 'string', Rule::in(['_self', '_blank'])],
             'is_home' => ['nullable', 'boolean'],
             'is_published' => ['nullable', 'boolean'],
             'published_at' => ['nullable', 'date'],

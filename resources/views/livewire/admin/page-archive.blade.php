@@ -1,10 +1,6 @@
 <x-admin-ui::page>
-    <x-admin-ui::page-header
-        :title="__('Arhiva')"
-        :description="__('Arhivirani sadržaj možete vratiti kada vam ponovno zatreba.')"
-        icon="document-text"
-    >
-        <x-slot:actions>
+    @if ($embedded)
+        <div class="flex justify-end">
             <flux:input
                 wire:model.live.debounce.300ms="search"
                 icon="magnifying-glass"
@@ -12,20 +8,38 @@
                 class="w-full md:w-96"
                 clearable
             />
-        </x-slot:actions>
-    </x-admin-ui::page-header>
+        </div>
+    @else
+        <x-admin-ui::page-header
+            :title="__('Arhiva')"
+            :description="__('Arhivirani sadržaj možete vratiti kada vam ponovno zatreba.')"
+            icon="document-text"
+        >
+            <x-slot:actions>
+                <flux:input
+                    wire:model.live.debounce.300ms="search"
+                    icon="magnifying-glass"
+                    :placeholder="__('Pretraži arhivu...')"
+                    class="w-full md:w-96"
+                    clearable
+                />
+            </x-slot:actions>
+        </x-admin-ui::page-header>
+    @endif
 
     <x-admin-ui::panel loading loading-target="search,restore,delete" loading-text="{{ __('Učitavam arhivu...') }}">
         @php($recordCount = count($this->archivedRecords->items()))
 
-        <div class="admin-panel-header">
-            <div>
-                <h2 class="admin-panel-title">{{ __('Arhivirani zapisi') }}</h2>
-                <p class="admin-panel-description">
-                    {{ trans_choice('{0} Nema arhiviranih zapisa na ovoj stranici.|{1} :count zapis na ovoj stranici.|[2,*] :count zapisa na ovoj stranici.', $recordCount, ['count' => $recordCount]) }}
-                </p>
+        @unless ($embedded)
+            <div class="admin-panel-header">
+                <div>
+                    <h2 class="admin-panel-title">{{ __('Arhivirani zapisi') }}</h2>
+                    <p class="admin-panel-description">
+                        {{ trans_choice('{0} Nema arhiviranih zapisa na ovoj stranici.|{1} :count zapis na ovoj stranici.|[2,*] :count zapisa na ovoj stranici.', $recordCount, ['count' => $recordCount]) }}
+                    </p>
+                </div>
             </div>
-        </div>
+        @endunless
 
         @if ($recordCount === 0)
             <x-admin-ui::empty-state

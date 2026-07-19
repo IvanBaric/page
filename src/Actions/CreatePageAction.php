@@ -10,11 +10,15 @@ use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Events\PageCreated;
 use IvanBaric\Pages\Models\Page;
+use IvanBaric\Pages\Rules\NavigationUrl;
+use IvanBaric\Pages\Support\PageHierarchy;
 use IvanBaric\Pages\Support\PagesModels;
 
 final class CreatePageAction
 {
     use AuthorizesPageActions;
+
+    public function __construct(private readonly PageHierarchy $hierarchy) {}
 
     /**
      * @param  array<string, mixed>  $data
@@ -23,6 +27,12 @@ final class CreatePageAction
     {
         if ($result = $this->authorizePageAction('pages.create')) {
             return $result;
+        }
+
+        if (($data['is_home'] ?? false) === true) {
+            $data['navigation_type'] = 'page';
+            $data['navigation_url'] = null;
+            $data['navigation_target'] = '_self';
         }
 
         $validator = Validator::make($data, $this->rules(), attributes: $this->attributes());
@@ -50,6 +60,10 @@ final class CreatePageAction
                 return ActionResult::error(__('Odabrana nadređena stranica nije dostupna.'));
             }
 
+            if ($this->hierarchy->depth($parent) >= $this->hierarchy->maxDepth()) {
+                return ActionResult::error(__('Stranica može imati najviše :count razine.', ['count' => $this->hierarchy->maxDepth()]));
+            }
+
             $data['parent_id'] = $parent->getKey();
         }
 
@@ -72,6 +86,9 @@ final class CreatePageAction
             'content' => ['nullable', 'array'],
             'status' => ['nullable', 'string', Rule::in(array_keys(config('pages.statuses', [])))],
             'template' => ['nullable', 'string', Rule::in(array_keys(config('pages.templates', [])))],
+            'navigation_type' => ['nullable', 'string', Rule::in(['page', 'url'])],
+            'navigation_url' => ['nullable', 'required_if:navigation_type,url', 'string', 'max:2048', new NavigationUrl],
+            'navigation_target' => ['nullable', 'string', Rule::in(['_self', '_blank'])],
             'is_home' => ['nullable', 'boolean'],
             'is_published' => ['nullable', 'boolean'],
             'published_at' => ['nullable', 'date'],
@@ -119,7 +136,6 @@ final class CreatePageAction
         return $model::query()
             ->forTenant((int) $tenantId)
             ->where('uuid', $uuid)
-            ->whereNull('parent_id')
             ->where('is_home', false)
             ->first();
     }

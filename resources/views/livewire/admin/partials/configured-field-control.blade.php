@@ -11,7 +11,7 @@
 @if ($fieldKey !== '' && $wireModel !== '')
     @if ($fieldType === 'textarea')
         @if ($isRequired)
-            <flux:textarea wire:model="{{ $wireModel }}" :label="$field['label']" :rows="$field['rows']" data-required />
+            <flux:textarea wire:model.live.debounce.300ms="{{ $wireModel }}" :label="$field['label']" :rows="$field['rows']" data-required />
         @else
             <flux:textarea wire:model="{{ $wireModel }}" :label="$field['label']" :rows="$field['rows']" />
         @endif
@@ -43,7 +43,7 @@
         />
     @else
         @if ($isRequired)
-            <flux:input wire:model="{{ $wireModel }}" :label="$field['label']" :type="$inputType" data-required />
+            <flux:input wire:model.live.debounce.300ms="{{ $wireModel }}" :label="$field['label']" :type="$inputType" data-required />
         @else
             <flux:input wire:model="{{ $wireModel }}" :label="$field['label']" :type="$inputType" />
         @endif

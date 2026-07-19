@@ -488,7 +488,7 @@ class PageShow extends Component
         $this->structureChanged(reload: false);
     }
 
-    private function structureChanged(bool $reload = true): void
+    private function structureChanged(bool $reload = false): void
     {
         if ($this->embedded) {
             $this->dispatch('pages-public-structure-updated', reload: $reload);
@@ -531,7 +531,7 @@ class PageShow extends Component
             ->ordered()
             ->get();
 
-        if (! app(OnePageNavigation::class)->isAvailable($publicPages)) {
+        if (! app(OnePageNavigation::class)->isSinglePageMode($publicPages)) {
             return false;
         }
 

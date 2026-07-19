@@ -8,6 +8,7 @@ use Illuminate\Support\Carbon;
 use IvanBaric\Pages\Actions\CreatePageAction;
 use IvanBaric\Pages\Actions\UpdatePageAction;
 use IvanBaric\Pages\Models\Page;
+use IvanBaric\Pages\Support\PageHierarchy;
 use IvanBaric\Pages\Support\PagesModels;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
@@ -32,6 +33,12 @@ final class PageForm extends Component
     public string $status = '';
 
     public ?string $template = null;
+
+    public string $navigation_type = 'page';
+
+    public string $navigation_url = '';
+
+    public bool $navigation_new_tab = false;
 
     public bool $is_home = false;
 
@@ -107,6 +114,9 @@ final class PageForm extends Component
         $this->content = is_array($page->content) ? $page->content : [$this->locale => (string) $page->content];
         $this->status = $page->status;
         $this->template = $page->template;
+        $this->navigation_type = $page->navigationType();
+        $this->navigation_url = (string) ($page->navigationUrl() ?? '');
+        $this->navigation_new_tab = $page->navigationTarget() === '_blank';
         $this->is_home = $page->is_home;
         $this->is_published = $page->is_published;
         $this->published_at = $page->published_at?->format('Y-m-d\TH:i');
@@ -126,6 +136,9 @@ final class PageForm extends Component
             'content' => array_filter($this->content) === [] ? null : $this->content,
             'status' => $this->status,
             'template' => $this->template,
+            'navigation_type' => $this->is_home ? 'page' : $this->navigation_type,
+            'navigation_url' => $this->is_home || $this->navigation_type !== 'url' ? null : trim($this->navigation_url),
+            'navigation_target' => ! $this->is_home && $this->navigation_type === 'url' && $this->navigation_new_tab ? '_blank' : '_self',
             'is_home' => $this->is_home,
             'is_published' => $this->is_published,
             'published_at' => $this->published_at ? Carbon::parse($this->published_at) : null,
@@ -135,7 +148,7 @@ final class PageForm extends Component
         ];
     }
 
-    /** @return array<int, array{uuid: string, label: string}> */
+    /** @return array<int, array{uuid: string, label: string, path: string, depth: int, resulting_depth: int}> */
     #[Computed]
     public function parentPageOptions(): array
     {
@@ -146,17 +159,11 @@ final class PageForm extends Component
             return [];
         }
 
-        return $model::query()
+        $pages = $model::query()
             ->forTenant((int) $tenantId)
-            ->whereNull('parent_id')
-            ->where('is_home', false)
-            ->when($this->page?->exists, fn ($query) => $query->whereKeyNot($this->page->getKey()))
             ->ordered()
-            ->get()
-            ->map(fn (Page $page): array => [
-                'uuid' => (string) $page->uuid,
-                'label' => $page->localized('title') ?: (string) $page->slug,
-            ])
-            ->all();
+            ->get();
+
+        return app(PageHierarchy::class)->parentOptions($pages, $this->page?->exists ? $this->page : null);
     }
 }

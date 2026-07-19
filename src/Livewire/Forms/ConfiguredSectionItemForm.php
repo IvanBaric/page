@@ -102,7 +102,7 @@ final class ConfiguredSectionItemForm extends Form
     public function messages(): array
     {
         return array_replace([
-            'required' => __('Obavezno polje'),
+            'required' => __('Polje :attribute je obavezno.'),
             'date' => __('Unesite ispravan datum.'),
             'date_format' => __('Unesite vrijeme u obliku HH:MM.'),
             'customData.ends_at.after_or_equal' => __('Vrijeme završetka ne smije biti ranije od vremena početka.'),
@@ -147,7 +147,7 @@ final class ConfiguredSectionItemForm extends Form
         $this->removeImage = false;
         $this->icon = $item->getAttribute('icon');
         $this->url = $item->getAttribute('url');
-        $this->youtubeUrl = data_get($item->getAttribute('settings'), 'youtube_url') ?: $item->getAttribute('url');
+        $this->youtubeUrl = data_get($item->getAttribute('settings'), 'youtube_url') ?: null;
         $this->buttonLabel = $item->localized('button_text') ?: null;
         $this->buttonUrl = $item->getAttribute('button_url');
         $this->visible = (bool) $item->getAttribute('is_visible');
@@ -211,7 +211,7 @@ final class ConfiguredSectionItemForm extends Form
 
             if ($youtubeData === null) {
                 throw ValidationException::withMessages([
-                    'youtubeUrl' => __('Unesite ispravan YouTube link.'),
+                    'youtubeUrl' => __('pages::pages.enter_valid_youtube_link'),
                 ]);
             }
         }

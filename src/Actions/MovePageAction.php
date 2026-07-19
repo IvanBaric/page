@@ -12,10 +12,13 @@ use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
 use IvanBaric\Pages\Events\PageUpdated;
 use IvanBaric\Pages\Models\Page;
+use IvanBaric\Pages\Support\PageHierarchy;
 
 final class MovePageAction
 {
     use AuthorizesPageActions, ResolvesPageModels;
+
+    public function __construct(private readonly PageHierarchy $hierarchy) {}
 
     public function handle(Page|string $page, ?string $parentUuid, int $position): ActionResult
     {
@@ -45,8 +48,8 @@ final class MovePageAction
             return ActionResult::error(__('Odabrana nadređena stranica nije dostupna.'));
         }
 
-        if ($parent && $page->children()->exists()) {
-            return ActionResult::error(__('Stranicu koja ima podstranice nije moguće premjestiti u drugu stranicu.'));
+        if (! $this->hierarchy->canMoveUnder($page, $parent)) {
+            return ActionResult::error(__('Odabrano mjesto prelazi dopuštene :count razine ili pripada podstablu ove stranice.', ['count' => $this->hierarchy->maxDepth()]));
         }
 
         $moved = DB::transaction(function () use ($page, $parent, $position): ?Page {
@@ -63,12 +66,11 @@ final class MovePageAction
                 $validParent = $page->newQuery()
                     ->whereKey($parent->getKey())
                     ->where('team_id', $lockedPage->team_id)
-                    ->whereNull('parent_id')
                     ->where('is_home', false)
                     ->lockForUpdate()
-                    ->exists();
+                    ->first();
 
-                if (! $validParent) {
+                if (! $validParent instanceof Page || ! $this->hierarchy->canMoveUnder($lockedPage, $validParent)) {
                     return null;
                 }
             }
@@ -102,7 +104,6 @@ final class MovePageAction
             ->where('team_id', $page->team_id)
             ->where('uuid', $parentUuid)
             ->whereKeyNot($page->getKey())
-            ->whereNull('parent_id')
             ->where('is_home', false)
             ->first();
     }

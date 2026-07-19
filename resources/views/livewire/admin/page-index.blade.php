@@ -30,6 +30,7 @@
                 <flux:button
                     type="button"
                     variant="primary"
+                    data-admin-submit-button
                     x-on:click="saving = true"
                     x-bind:disabled="saving"
                     wire:click="$dispatch('pages-save-singleton-editor')"
@@ -136,8 +137,11 @@
                         <div class="min-w-0">
                             <div class="flex min-w-0 items-center gap-2">
                                 <a href="{{ route($this->pageShowRouteName(), ['page' => $page->uuid]) }}" wire:navigate class="truncate text-[15px] font-semibold text-zinc-950 transition hover:text-accent dark:text-white">{{ $page->localized('title') ?: __('Neimenovana stranica') }}</a>
+                                @if ($page->navigationType() === 'url')
+                                    <flux:badge size="sm" icon="link">{{ __('Poveznica') }}</flux:badge>
+                                @endif
                             </div>
-                            <p class="mt-1 truncate text-[13px] text-zinc-500 dark:text-zinc-400">{{ $page->localized('excerpt') ?: $page->slug }}</p>
+                            <p class="mt-1 truncate text-[13px] text-zinc-500 dark:text-zinc-400">{{ $page->navigationUrl() ?: ($page->localized('excerpt') ?: $page->slug) }}</p>
                         </div>
                         <div class="text-sm tabular-nums text-zinc-600 dark:text-zinc-300">{{ trans_choice('{0} bez sekcija|{1} :count sekcija|[2,*] :count sekcija', $page->sections_count, ['count' => $page->sections_count]) }}</div>
                         <div wire:sort:ignore class="min-w-0">
@@ -153,7 +157,7 @@
 
                                 <flux:menu>
                                     <flux:menu.item as="button" type="button" wire:click="editPage('{{ $page->uuid }}')" icon="pencil-square">
-                                        {{ __('Promijeni naziv') }}
+                                        {{ __('Uredi stranicu') }}
                                     </flux:menu.item>
                                     <flux:menu.item :href="$this->publicPageUrl($page)" target="_blank" rel="noopener noreferrer" icon="eye">
                                         {{ __('Javni prikaz') }}
@@ -195,11 +199,16 @@
                 </div>
 
                 <flux:input wire:model="newPageTitle" :label="__('Naziv stranice')" :placeholder="__('Npr. Projekti, Radionice ili Donacije')" data-required autofocus />
-                <flux:select wire:model="newPageParentUuid" variant="listbox" :label="__('Nadređena stranica')" :description="__('Ostavite prazno za stavku glavnog izbornika.')">
-                    <flux:select.option value="">{{ __('Glavna razina') }}</flux:select.option>
-                    @foreach ($this->parentPageOptions as $option)
-                        <flux:select.option :value="$option['uuid']">{{ $option['label'] }}</flux:select.option>
-                    @endforeach
+                <flux:radio.group wire:model.live="newPageNavigationType" variant="segmented" :label="__('Vrsta stavke izbornika')">
+                    <flux:radio value="page" :label="__('Stranica')" icon="document-text" />
+                    <flux:radio value="url" :label="__('Poveznica')" icon="link" />
+                </flux:radio.group>
+                @if ($newPageNavigationType === 'url')
+                    <flux:input wire:model="newPageNavigationUrl" :label="__('URL poveznice')" placeholder="https://primjer.hr" inputmode="url" data-required />
+                    <flux:checkbox wire:model="newPageNavigationNewTab" :label="__('Otvori u novoj kartici')" />
+                @endif
+                <flux:select wire:model="newPageParentUuid" :label="__('Nadređena stranica')" :description="__('Odaberite putanju. Struktura može imati najviše tri razine.')">
+                    @include('pages::livewire.partials.hierarchy-parent-options', ['options' => $this->parentPageOptions])
                 </flux:select>
 
                 <div class="flex justify-end gap-2">
@@ -222,11 +231,18 @@
                 <div class="grid gap-5">
                     <flux:input wire:model="pageTitle" :label="__('Naziv stranice')" data-required autofocus />
                     <flux:textarea wire:model="pageExcerpt" :label="__('Kratki opis')" rows="3" />
-                    <flux:select wire:model="pageParentUuid" variant="listbox" :label="__('Nadređena stranica')" :description="__('Podstranica će se prikazati u padajućem izborniku nadređene stranice.')">
-                        <flux:select.option value="">{{ __('Glavna razina') }}</flux:select.option>
-                        @foreach ($this->parentPageOptions as $option)
-                            <flux:select.option :value="$option['uuid']">{{ $option['label'] }}</flux:select.option>
-                        @endforeach
+                    @if (! $pageIsHome)
+                        <flux:radio.group wire:model.live="pageNavigationType" variant="segmented" :label="__('Vrsta stavke izbornika')">
+                            <flux:radio value="page" :label="__('Stranica')" icon="document-text" />
+                            <flux:radio value="url" :label="__('Poveznica')" icon="link" />
+                        </flux:radio.group>
+                        @if ($pageNavigationType === 'url')
+                            <flux:input wire:model="pageNavigationUrl" :label="__('URL poveznice')" placeholder="https://primjer.hr" inputmode="url" data-required />
+                            <flux:checkbox wire:model="pageNavigationNewTab" :label="__('Otvori u novoj kartici')" />
+                        @endif
+                    @endif
+                    <flux:select wire:model="pageParentUuid" :label="__('Nadređena stranica')" :description="__('Odaberite razinu i punu putanju u izborniku.')">
+                        @include('pages::livewire.partials.hierarchy-parent-options', ['options' => $this->parentPageOptions])
                     </flux:select>
                 </div>
 

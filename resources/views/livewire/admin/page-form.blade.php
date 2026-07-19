@@ -30,16 +30,26 @@
             <flux:input wire:model="published_at" :label="__('Datum objave')" type="datetime-local" />
             <flux:input wire:model="sort_order" :label="__('Redoslijed')" type="number" min="0" />
             @if (! $is_home)
-                <flux:select wire:model="parent_uuid" variant="listbox" :label="__('Nadređena stranica')" :description="__('Podstranica se prikazuje u padajućem izborniku nadređene stranice.')">
-                    <flux:select.option value="">{{ __('Glavna razina') }}</flux:select.option>
-                    @foreach ($this->parentPageOptions as $option)
-                        <flux:select.option :value="$option['uuid']">{{ $option['label'] }}</flux:select.option>
-                    @endforeach
+                <flux:select wire:model="parent_uuid" :label="__('Nadređena stranica')" :description="__('Odaberite razinu i punu putanju u izborniku.')">
+                    @include('pages::livewire.partials.hierarchy-parent-options', ['options' => $this->parentPageOptions])
                 </flux:select>
             @endif
-            <flux:checkbox wire:model="is_home" :label="__('Naslovnica')" />
+            <flux:checkbox wire:model.live="is_home" :label="__('Naslovnica')" />
             <flux:checkbox wire:model="is_published" :label="__('Objavljeno')" />
         </div>
+        @if (! $is_home)
+            <div class="grid gap-5 border-y border-zinc-200 py-6 dark:border-zinc-800">
+                <flux:radio.group wire:model.live="navigation_type" variant="segmented" :label="__('Vrsta stavke izbornika')">
+                    <flux:radio value="page" :label="__('Stranica')" icon="document-text" />
+                    <flux:radio value="url" :label="__('Poveznica')" icon="link" />
+                </flux:radio.group>
+
+                @if ($navigation_type === 'url')
+                    <flux:input wire:model="navigation_url" :label="__('URL poveznice')" :description="__('Unesite punu web adresu, relativnu putanju, e-poštu ili telefonsku poveznicu.')" placeholder="https://primjer.hr" inputmode="url" data-required />
+                    <flux:checkbox wire:model="navigation_new_tab" :label="__('Otvori u novoj kartici')" />
+                @endif
+            </div>
+        @endif
         <div class="flex items-center gap-3">
             <x-admin-ui::submit-button target="save">
                 {{ __('Spremi') }}

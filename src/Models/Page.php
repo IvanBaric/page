@@ -13,6 +13,7 @@ use IvanBaric\Corexis\Concerns\BelongsToTenant;
 use IvanBaric\Corexis\Concerns\HasLockVersion;
 use IvanBaric\Corexis\Concerns\HasUniqueSlug;
 use IvanBaric\Corexis\Concerns\HasUuid;
+use IvanBaric\Pages\Support\OnePageNavigation;
 use IvanBaric\Pages\Support\PagesConfigResolver;
 use IvanBaric\Pages\Support\PagesModels;
 
@@ -28,6 +29,9 @@ use IvanBaric\Pages\Support\PagesModels;
  * @property array<string, mixed>|string|null $content
  * @property string $status
  * @property string|null $template
+ * @property string $navigation_type
+ * @property string|null $navigation_url
+ * @property string $navigation_target
  * @property bool $is_home
  * @property bool $is_published
  * @property Carbon|null $published_at
@@ -149,9 +153,25 @@ class Page extends Model
     #[Scope]
     protected function navigationVisible(Builder $query): void
     {
-        $query->where(function (Builder $query): void {
-            $query->whereNull('parent_id')
-                ->orWhereHas('parent', fn (Builder $parent): Builder => $parent->published());
+        $maxDepth = max(1, (int) config('pages.hierarchy.max_depth', 3));
+        $model = $query->getModel();
+        $parentColumn = $model->qualifyColumn('parent_id');
+        $ancestorIds = $model->newQuery()
+            ->select($model->getQualifiedKeyName())
+            ->published()
+            ->whereNull('parent_id');
+
+        $query->where(function (Builder $visible) use ($ancestorIds, $maxDepth, $model, $parentColumn): void {
+            $visible->whereNull($parentColumn);
+
+            for ($depth = 2; $depth <= $maxDepth; $depth++) {
+                $visible->orWhereIn($parentColumn, clone $ancestorIds);
+
+                $ancestorIds = $model->newQuery()
+                    ->select($model->getQualifiedKeyName())
+                    ->published()
+                    ->whereIn($model->qualifyColumn('parent_id'), clone $ancestorIds);
+            }
         });
     }
 
@@ -196,6 +216,40 @@ class Page extends Model
     public function isHome(): bool
     {
         return $this->is_home;
+    }
+
+    public function navigationType(): string
+    {
+        return $this->navigation_type === 'url' && ! $this->is_home ? 'url' : 'page';
+    }
+
+    public function navigationUrl(): ?string
+    {
+        $url = trim((string) $this->navigation_url);
+
+        return $this->navigationType() === 'url' && $url !== '' ? $url : null;
+    }
+
+    public function navigationTarget(): string
+    {
+        return $this->navigationType() === 'url' && $this->navigation_target === '_blank'
+            ? '_blank'
+            : '_self';
+    }
+
+    public function shouldEagerLoadNavigationSections(): bool
+    {
+        if (! is_numeric($this->team_id)) {
+            return false;
+        }
+
+        $pages = static::query()
+            ->forTenant((int) $this->team_id)
+            ->published()
+            ->navigationVisible()
+            ->get(['id', 'is_home', 'navigation_type']);
+
+        return app(OnePageNavigation::class)->isSinglePageMode($pages);
     }
 
     public function slugSource(): string

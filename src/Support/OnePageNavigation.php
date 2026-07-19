@@ -11,7 +11,7 @@ use Illuminate\Support\Str;
 final class OnePageNavigation
 {
     /**
-     * @return array<int, array{label: string, href: string, active: bool}>
+     * @return array<int, array{label: string, href: string, active: bool, target: string, children: array<mixed>}>
      */
     public function navItems(mixed $publicPages, string $homeUrl): array
     {
@@ -19,24 +19,52 @@ final class OnePageNavigation
             return [];
         }
 
-        $homePage = $this->pages($publicPages)->first();
+        $pages = $this->pages($publicPages);
+        $homePage = $pages->first(fn (mixed $page): bool => (bool) data_get($page, 'is_home'));
 
-        return $this->sectionsFor($homePage)
+        $sectionItems = $this->sectionsFor($homePage)
             ->filter(fn (mixed $section): bool => $this->isVisibleInNavigation($section))
             ->map(fn (mixed $section): array => [
                 'label' => $this->sectionLabel($section),
                 'href' => $this->normalizeBaseUrl($homeUrl).'#'.$this->anchorId($section),
                 'active' => false,
+                'target' => '_self',
+                'children' => [],
             ])
             ->filter(fn (array $item): bool => filled($item['label']) && filled($item['href']))
+            ->values();
+
+        $linkItems = app(PageNavigationTree::class)->build(
+            $pages->filter(fn (mixed $page): bool => $this->navigationType($page) === 'url')->values(),
+            fn (mixed $page): array => [
+                'label' => $this->pageLabel($page),
+                'href' => $this->navigationUrl($page),
+                'active' => false,
+                'target' => $this->navigationTarget($page),
+            ],
+        );
+
+        return $sectionItems
+            ->concat($linkItems)
             ->values()
             ->all();
     }
 
     public function isAvailable(mixed $publicPages): bool
     {
-        $pages = $this->pages($publicPages);
-        $homePage = $pages->first();
+        if (! (bool) config('pages.one_page_navigation.enabled', true)) {
+            return false;
+        }
+
+        return $this->isSinglePageMode($publicPages);
+    }
+
+    public function isSinglePageMode(mixed $publicPages): bool
+    {
+        $pages = $this->pages($publicPages)
+            ->reject(fn (mixed $page): bool => $this->navigationType($page) === 'url')
+            ->values();
+        $homePage = $pages->first(fn (mixed $page): bool => (bool) data_get($page, 'is_home'));
 
         return $pages->count() === 1 && (bool) data_get($homePage, 'is_home');
     }
@@ -138,6 +166,42 @@ final class OnePageNavigation
         }
 
         return $type !== '' ? (string) str($type)->headline() : '';
+    }
+
+    private function pageLabel(mixed $page): string
+    {
+        return is_object($page) && method_exists($page, 'localized')
+            ? trim((string) $page->localized('title'))
+            : trim((string) data_get($page, 'title', data_get($page, 'slug', '')));
+    }
+
+    private function navigationType(mixed $page): string
+    {
+        if ((bool) data_get($page, 'is_home')) {
+            return 'page';
+        }
+
+        return is_object($page) && method_exists($page, 'navigationType')
+            ? $page->navigationType()
+            : ((string) data_get($page, 'navigation_type') === 'url' ? 'url' : 'page');
+    }
+
+    private function navigationUrl(mixed $page): string
+    {
+        if (is_object($page) && method_exists($page, 'navigationUrl')) {
+            return (string) ($page->navigationUrl() ?? '');
+        }
+
+        return trim((string) data_get($page, 'navigation_url', ''));
+    }
+
+    private function navigationTarget(mixed $page): string
+    {
+        $target = is_object($page) && method_exists($page, 'navigationTarget')
+            ? $page->navigationTarget()
+            : (string) data_get($page, 'navigation_target', '_self');
+
+        return $target === '_blank' ? '_blank' : '_self';
     }
 
     /** @return Collection<int, mixed> */

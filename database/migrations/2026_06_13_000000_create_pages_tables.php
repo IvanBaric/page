@@ -23,6 +23,9 @@ return new class extends Migration
             $table->json('content')->nullable();
             $table->string('status')->index();
             $table->string('template')->nullable()->index();
+            $table->string('navigation_type')->default('page')->index();
+            $table->string('navigation_url', 2048)->nullable();
+            $table->string('navigation_target', 16)->default('_self');
             $table->boolean('is_home')->default(false)->index();
             $table->boolean('is_published')->default(false)->index();
             $table->timestamp('published_at')->nullable()->index();

@@ -5,6 +5,7 @@ namespace IvanBaric\Pages\Livewire\Admin;
 use Flux\Flux;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use IvanBaric\AdminUi\Support\HeroiconRegistry;
@@ -87,13 +88,13 @@ class ConfiguredItemsEditor extends Component
         $this->section = $sectionModel::query()->whereKey($section->getKey())->firstOrFail();
 
         $this->resetItemForm();
-        $this->tab = $this->validTabKey($this->tab);
 
-        $settings = (array) $this->section->getAttribute('settings');
+        $settings = $this->settingsForEditorForm((array) $this->section->getAttribute('settings'));
+        $this->settingsForm = $this->initialSettingsForm($settings);
         $this->layoutVariant = $this->normalizeLayoutVariant(
             data_get($settings, $this->layoutSettingsPath(), $this->layoutDefault()),
         );
-        $this->settingsForm = $this->initialSettingsForm($settings);
+        $this->tab = $this->validTabKey($this->tab);
         $this->originalGalleryContentSource = (string) data_get($settings, 'content_source', '');
         $this->sectionTitle = $this->section->localized('title');
         $this->sectionDescription = $this->section->localized('description') ?: null;
@@ -151,6 +152,11 @@ class ConfiguredItemsEditor extends Component
         $this->resetItemForm();
         $this->editingItemUuid = (string) $item->getAttribute('uuid');
         $this->form->fillFromModel($item);
+
+        if ($this->itemsTab()?->field('youtube_url') instanceof Field && blank($this->form->youtubeUrl)) {
+            $this->form->youtubeUrl = $item->getAttribute('url');
+        }
+
         $this->configureItemForm();
         $this->form->fillCustomDataFromModel($item);
 
@@ -337,6 +343,7 @@ class ConfiguredItemsEditor extends Component
         if ($this->resultSuccessful($result)) {
             $this->section = $this->section->refresh();
             $this->dispatchPublicSectionRefresh();
+            $this->dispatchPublicStructureRefresh();
         }
 
         if ($showToast) {
@@ -362,12 +369,15 @@ class ConfiguredItemsEditor extends Component
             data_set($settings, $this->settingsStoragePath($field), $this->normalizeSettingValue($field, $value));
         }
 
+        $settings = $this->normalizeSettingsBeforeSave($settings);
+
         $result = $this->executeConfiguredAction('save_section', [$this->section, ['settings' => $settings]])
             ?? $this->saveSectionFallback(['settings' => $settings]);
 
         $this->section = $this->section->refresh();
-        $this->settingsForm = $this->initialSettingsForm((array) $this->section->getAttribute('settings'));
-        $this->originalGalleryContentSource = (string) data_get($this->section->getAttribute('settings'), 'content_source', '');
+        $editorSettings = $this->settingsForEditorForm((array) $this->section->getAttribute('settings'));
+        $this->settingsForm = $this->initialSettingsForm($editorSettings);
+        $this->originalGalleryContentSource = (string) data_get($editorSettings, 'content_source', '');
 
         $this->dispatchPublicSectionRefreshIfSuccessful($result);
 
@@ -419,21 +429,21 @@ class ConfiguredItemsEditor extends Component
 
     public function hasHiddenDirectGalleryMedia(): bool
     {
-        return (string) data_get($this->settingsForm, 'content_source') === 'albums'
+        return in_array((string) data_get($this->settingsForm, 'content_source'), ['albums', 'selected_gallery'], true)
             && $this->hiddenDirectGalleryMedia() !== [];
     }
 
     public function keepDirectGalleryMedia(): void
     {
         corexis_authorize('pages.sections.manage', $this->section);
-        abort_unless($this->pendingGalleryContentSource === 'albums', 409);
+        abort_unless(in_array($this->pendingGalleryContentSource, ['albums', 'selected_gallery'], true), 409);
         $this->applyPendingGalleryContentSource();
     }
 
     public function deleteDirectGalleryMedia(DeleteGalleryMediaAction $action): void
     {
         corexis_authorize('pages.sections.manage', $this->section);
-        abort_unless($this->pendingGalleryContentSource === 'albums', 409);
+        abort_unless(in_array($this->pendingGalleryContentSource, ['albums', 'selected_gallery'], true), 409);
         $gallery = method_exists($this->section, 'gallery')
             ? $this->section->gallery((string) config('gallery.default_collection', 'images'))
             : null;
@@ -450,7 +460,19 @@ class ConfiguredItemsEditor extends Component
 
         $this->section->unsetRelation('galleries');
         $this->applyPendingGalleryContentSource();
+        $this->dispatchPublicSectionRefresh();
         $this->toast(true, __('Fotografije vezane uz sekciju su obrisane.'));
+    }
+
+    #[On('gallery-media-changed')]
+    public function galleryMediaChanged(?string $subjectClass = null, int|string|null $subjectKey = null): void
+    {
+        if ($subjectClass !== $this->section::class || (string) $subjectKey !== (string) $this->section->getKey()) {
+            return;
+        }
+
+        $this->section = $this->section->refresh();
+        $this->dispatchPublicSectionRefresh();
     }
 
     public function cancelGallerySourceChange(): void
@@ -479,6 +501,11 @@ class ConfiguredItemsEditor extends Component
         }
     }
 
+    private function dispatchPublicStructureRefresh(): void
+    {
+        $this->dispatch('pages-public-structure-updated', reload: false);
+    }
+
     /** @return array<int, array{key: string, label: string, type: string, icon: string}> */
     public function editorTabs(): array
     {
@@ -493,7 +520,7 @@ class ConfiguredItemsEditor extends Component
                 ],
                 array_values(array_filter(
                     $this->definition()?->tabsValue() ?? [],
-                    fn (Tab $tab): bool => $this->isConditionVisible($tab->optionValue('visible_when')),
+                    fn (Tab $tab): bool => $this->shouldShowTabInEditorNavigation($tab),
                 )),
             ),
         ];
@@ -506,7 +533,7 @@ class ConfiguredItemsEditor extends Component
         $publicPages = $pageModel::query()->published()->ordered()->get();
         $page = $this->section->page;
 
-        return app(OnePageNavigation::class)->isAvailable($publicPages)
+        return app(OnePageNavigation::class)->isSinglePageMode($publicPages)
             && (string) data_get($publicPages->first(), 'uuid') === (string) $page?->getAttribute('uuid')
             && app(OnePageNavigation::class)->canShowSection($this->section);
     }
@@ -708,15 +735,39 @@ class ConfiguredItemsEditor extends Component
     public function viewTabs(): array
     {
         return array_values(array_filter(array_map(
-            fn (Tab $tab): ?array => $tab->type() === 'view' && $this->isConditionVisible($tab->optionValue('visible_when')) ? [
-                'key' => $tab->key(),
-                'label' => $tab->labelValue(),
-                'view' => (string) $tab->optionValue('view', ''),
-                'heading' => (string) $tab->optionValue('heading', $tab->labelValue()),
-                'description' => (string) $tab->optionValue('description', ''),
-            ] : null,
+            fn (Tab $tab): ?array => $tab->type() === 'view'
+                && ! (bool) $tab->optionValue('embed_in_source_panel', false)
+                && $this->isConditionVisible($tab->optionValue('visible_when'))
+                    ? $this->viewTabData($tab)
+                    : null,
             $this->definition()?->tabsValue() ?? [],
         )));
+    }
+
+    /** @param array<string, mixed> $settingsPanel */
+    public function sourcePanelPhotoViewTab(array $settingsPanel): ?array
+    {
+        if (! collect((array) ($settingsPanel['fields'] ?? []))->contains('key', 'content_source')) {
+            return null;
+        }
+
+        if ((string) data_get($this->settingsForm, 'content_source') !== 'direct') {
+            return null;
+        }
+
+        $viewTab = collect($this->definition()?->tabsValue() ?? [])
+            ->first(fn (Tab $tab): bool => $tab->type() === 'view'
+                && $tab->key() === 'photos'
+                && (bool) $tab->optionValue('embed_in_source_panel', false)
+                && $this->isConditionVisible($tab->optionValue('visible_when')));
+
+        if (! $viewTab instanceof Tab) {
+            return null;
+        }
+
+        $viewTab = $this->viewTabData($viewTab);
+
+        return view()->exists((string) ($viewTab['view'] ?? '')) ? $viewTab : null;
     }
 
     public function hasViewTabs(): bool
@@ -780,11 +831,22 @@ class ConfiguredItemsEditor extends Component
             return;
         }
 
+        $tab = $this->itemsTab();
+
         $item = $this->section->items()->orderBy('sort_order')->orderBy('created_at')->first();
 
         if ($item instanceof SectionItem) {
             $this->editingItemUuid = (string) $item->getAttribute('uuid');
             $this->form->fillFromModel($item);
+
+            if ($tab?->field('youtube_url') instanceof Field && blank($this->form->youtubeUrl)) {
+                $this->form->youtubeUrl = $item->getAttribute('url');
+            }
+
+            if (! ($tab?->field('youtube_url') instanceof Field)) {
+                $this->form->youtubeUrl = null;
+            }
+
             $this->configureItemForm();
             $this->form->fillCustomDataFromModel($item);
 
@@ -887,23 +949,33 @@ class ConfiguredItemsEditor extends Component
             ?: __('Stavka');
     }
 
-    private function firstTabKey(): string
-    {
-        $tabs = array_values($this->definition()?->tabsValue() ?? []);
-
-        return $tabs === [] ? 'content' : $tabs[0]->key();
-    }
-
     private function validTabKey(?string $tab): string
     {
         $tab = (string) $tab;
-        $keys = array_map(
-            static fn (Tab $tab): string => $tab->key(),
-            $this->definition()?->tabsValue() ?? [],
-        );
-        $keys[] = 'section';
+        $keys = collect($this->editorTabs())->pluck('key')->map('strval')->all();
 
-        return in_array($tab, $keys, true) ? $tab : $this->firstTabKey();
+        return in_array($tab, $keys, true) ? $tab : ($keys[0] ?? 'section');
+    }
+
+    private function shouldShowTabInEditorNavigation(Tab $tab): bool
+    {
+        if ((bool) $tab->optionValue('embed_in_source_panel', false)) {
+            return false;
+        }
+
+        return $this->isConditionVisible($tab->optionValue('visible_when'));
+    }
+
+    /** @return array{key: string, label: string, view: string, heading: string, description: string} */
+    private function viewTabData(Tab $tab): array
+    {
+        return [
+            'key' => $tab->key(),
+            'label' => $tab->labelValue(),
+            'view' => (string) $tab->optionValue('view', ''),
+            'heading' => (string) $tab->optionValue('heading', $tab->labelValue()),
+            'description' => (string) $tab->optionValue('description', ''),
+        ];
     }
 
     private function iconForTab(Tab $tab): string
@@ -925,13 +997,19 @@ class ConfiguredItemsEditor extends Component
 
     private function normalizeLayoutVariant(mixed $variant): string
     {
-        $allowed = $this->layoutTab()?->variantKeys() ?? [];
+        $allowed = collect($this->layoutVariants())->pluck('key')->map('strval')->all();
 
         if ($allowed === []) {
             return (string) $variant;
         }
 
-        return in_array($variant, $allowed, true) ? (string) $variant : $this->layoutDefault();
+        if (in_array($variant, $allowed, true)) {
+            return (string) $variant;
+        }
+
+        $default = $this->layoutDefault();
+
+        return in_array($default, $allowed, true) ? $default : (string) $allowed[0];
     }
 
     private function layoutDefault(): string
@@ -1001,6 +1079,15 @@ class ConfiguredItemsEditor extends Component
                 $rules['settingsForm.'.$field->key().'.*'] = ['string', Rule::in($allowedValues)];
                 $attributes['settingsForm.'.$field->key().'.*'] = $field->labelValue();
             }
+
+            if ($field->type() === 'select' && $this->fieldOptions($field) !== []) {
+                $allowedValues = array_map(
+                    static fn (array $option): string => (string) $option['value'],
+                    $this->fieldOptions($field),
+                );
+
+                $rules['settingsForm.'.$field->key()][] = Rule::in($allowedValues);
+            }
         }
 
         if ($rules !== []) {
@@ -1068,7 +1155,12 @@ class ConfiguredItemsEditor extends Component
             return true;
         }
 
-        return data_get($this->settingsForm, (string) $condition['field']) === ($condition['value'] ?? null);
+        $actual = data_get($this->settingsForm, (string) $condition['field']);
+        $expected = $condition['value'] ?? null;
+
+        return is_array($expected)
+            ? in_array($actual, $expected, true)
+            : $actual === $expected;
     }
 
     private function fieldHasDependents(string $fieldKey): bool
@@ -1110,6 +1202,54 @@ class ConfiguredItemsEditor extends Component
         $storage = (string) ($field->optionValue('storage', $field->key()) ?? $field->key());
 
         return str_starts_with($storage, 'settings.') ? substr($storage, 9) : $storage;
+    }
+
+    /** @param array<string, mixed> $settings */
+    private function settingsForEditorForm(array $settings): array
+    {
+        if (! in_array((string) $this->section->getAttribute('type'), ['gallery', 'gallery_grid'], true)) {
+            return $settings;
+        }
+
+        $source = (string) data_get($settings, 'content_source', 'albums');
+        $legacyGalleryUuid = collect((array) data_get($settings, 'gallery_uuids', []))
+            ->filter(static fn (mixed $uuid): bool => is_string($uuid) && Str::isUuid($uuid))
+            ->first();
+
+        if ($source === 'albums' && is_string($legacyGalleryUuid)) {
+            data_set($settings, 'content_source', 'selected_gallery');
+            data_set($settings, 'gallery_uuid', $legacyGalleryUuid);
+        }
+
+        if ($source === 'selected_gallery' && blank(data_get($settings, 'gallery_uuid')) && is_string($legacyGalleryUuid)) {
+            data_set($settings, 'gallery_uuid', $legacyGalleryUuid);
+        }
+
+        return $settings;
+    }
+
+    /** @param array<string, mixed> $settings */
+    private function normalizeSettingsBeforeSave(array $settings): array
+    {
+        if (! in_array((string) $this->section->getAttribute('type'), ['gallery', 'gallery_grid'], true)) {
+            return $settings;
+        }
+
+        $source = (string) data_get($settings, 'content_source', 'albums');
+
+        if ($source === 'albums') {
+            data_forget($settings, 'gallery_uuid');
+            data_set($settings, 'gallery_uuids', []);
+        }
+
+        if ($source === 'selected_gallery') {
+            $galleryUuid = data_get($settings, 'gallery_uuid');
+            $galleryUuid = is_string($galleryUuid) && Str::isUuid($galleryUuid) ? $galleryUuid : null;
+
+            data_set($settings, 'gallery_uuids', $galleryUuid ? [$galleryUuid] : []);
+        }
+
+        return $settings;
     }
 
     private function normalizeSettingValue(Field $field, mixed $value): mixed
@@ -1307,7 +1447,7 @@ class ConfiguredItemsEditor extends Component
     {
         return in_array((string) $this->section->getAttribute('type'), ['gallery', 'gallery_grid'], true)
             && $this->originalGalleryContentSource === 'direct'
-            && $value === 'albums'
+            && in_array($value, ['albums', 'selected_gallery'], true)
             && $this->hiddenDirectGalleryMedia() !== [];
     }
 

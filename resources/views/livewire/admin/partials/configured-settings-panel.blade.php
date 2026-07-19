@@ -97,7 +97,12 @@
                                             <label class="flex cursor-pointer items-start gap-3 rounded-lg px-3 py-2.5 hover:bg-white dark:hover:bg-zinc-900">
                                                 <flux:checkbox wire:model="settingsForm.{{ $field['key'] }}" value="{{ $option['value'] }}" class="mt-0.5" />
                                                 <span class="min-w-0">
-                                                    <span class="block text-sm font-medium text-zinc-900 dark:text-white">{{ $option['label'] }}</span>
+                                                    <span class="block text-sm font-medium text-zinc-900 dark:text-white">
+                                                        {{ $option['label'] }}
+                                                        @if (array_key_exists('count', $option))
+                                                            <span class="text-zinc-500 dark:text-zinc-400">({{ (int) $option['count'] }})</span>
+                                                        @endif
+                                                    </span>
                                                     @if (($option['description'] ?? '') !== '')
                                                         <span class="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-400">{{ $option['description'] }}</span>
                                                     @endif
@@ -210,4 +215,14 @@
         </div>
 
     </form>
+
+    @if (method_exists($this, 'sourcePanelPhotoViewTab') && ($sourcePhotoViewTab = $this->sourcePanelPhotoViewTab($settingsPanel)))
+        <div class="border-t border-zinc-200 p-4 sm:p-6 dark:border-zinc-800">
+            @include($sourcePhotoViewTab['view'], [
+                'section' => $section,
+                'viewTab' => $sourcePhotoViewTab,
+                'managerKeySuffix' => 'source-panel',
+            ])
+        </div>
+    @endif
 </section>

@@ -25,6 +25,7 @@
                             type="button"
                             variant="primary"
                             size="sm"
+                            data-admin-submit-button
                             x-on:click="saving = true"
                             x-bind:disabled="saving"
                             wire:click="$dispatch('pages-save-singleton-editor')"

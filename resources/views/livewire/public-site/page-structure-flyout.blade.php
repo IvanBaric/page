@@ -6,7 +6,7 @@
 
     <flux:modal name="public-page-structure" x-on:close="$wire.closeStructure()" flyout variant="floating" class="w-full md:w-2xl xl:w-5xl">
         @if ($loaded)
-        <div class="mb-5 flex items-center justify-between gap-3">
+        <div class="mb-5 flex items-center justify-between gap-3 pr-10 sm:pr-12">
             <div class="flex min-w-0 items-center gap-3">
                 @if ($this->selectedPage)
                     <flux:button type="button" wire:click="showPages" variant="ghost" size="sm" icon="arrow-left" :aria-label="__('Sve stranice')" />
@@ -43,32 +43,12 @@
 
                 <div wire:sort="movePageInStructure" wire:sort:group="public-page-structure" wire:sort:group-id="root">
                     @forelse ($this->pages->whereNull('parent_id') as $listedPage)
-                        <section wire:key="public-page-group-{{ $listedPage->uuid }}" wire:sort:item="{{ $listedPage->uuid }}" class="border-b border-zinc-200 last:border-b-0 dark:border-zinc-800">
-                            @include('pages::livewire.public-site.partials.page-structure-row', [
-                                'listedPage' => $listedPage,
-                                'isChild' => false,
-                                'showSectionEditor' => true,
-                                'showPublicPreview' => true,
-                            ])
-
-                            <div
-                                wire:sort="movePageInStructure"
-                                wire:sort:group="public-page-structure"
-                                wire:sort:group-id="{{ $listedPage->uuid }}"
-                                class="min-h-3 divide-y divide-zinc-200 border-t border-zinc-100 dark:divide-zinc-800 dark:border-zinc-900"
-                            >
-                                @foreach ($this->pages->where('parent_id', $listedPage->getKey()) as $childPage)
-                                    <div wire:key="public-page-child-{{ $childPage->uuid }}" wire:sort:item="{{ $childPage->uuid }}">
-                                        @include('pages::livewire.public-site.partials.page-structure-row', [
-                                            'listedPage' => $childPage,
-                                            'isChild' => true,
-                                            'showSectionEditor' => true,
-                                            'showPublicPreview' => true,
-                                        ])
-                                    </div>
-                                @endforeach
-                            </div>
-                        </section>
+                        @include('pages::livewire.public-site.partials.page-structure-branch', [
+                            'listedPage' => $listedPage,
+                            'depth' => 1,
+                            'showSectionEditor' => true,
+                            'showPublicPreview' => true,
+                        ])
                     @empty
                         <x-admin-ui::empty-state
                             :title="__('Još nema stranica')"
@@ -94,19 +74,17 @@
                 <flux:text class="mt-2">{{ __('Odaberite gdje će se stranica prikazivati u glavnom izborniku. Nakon premještanja možete je povući na točan položaj.') }}</flux:text>
             </div>
 
-            <flux:select wire:model="movePageParentUuid" variant="listbox" :label="__('Mjesto u izborniku')">
-                <flux:select.option value="">{{ __('Glavna razina') }}</flux:select.option>
-                @foreach ($this->movePageOptions as $option)
-                    <flux:select.option :value="$option['uuid']">{{ __('Podstranica: :page', ['page' => $option['label']]) }}</flux:select.option>
-                @endforeach
+            <flux:select wire:model.live="movePageParentUuid" :label="__('Nadređena stranica')" :description="__('Odaberite razinu i putanju. Struktura može imati najviše tri razine.')">
+                @include('pages::livewire.partials.hierarchy-parent-options', ['options' => $this->movePageOptions])
             </flux:select>
 
-            @if ($movingPageUuid && $this->pages->firstWhere('uuid', $movingPageUuid)?->children_exists)
-                <flux:callout variant="warning" icon="exclamation-triangle">
-                    <flux:callout.heading>{{ __('Stranica ima podstranice') }}</flux:callout.heading>
-                    <flux:callout.text>{{ __('Stranicu s podstranicama možete premjestiti samo unutar glavne razine.') }}</flux:callout.text>
-                </flux:callout>
-            @endif
+            @php($moveDestination = collect($this->movePageOptions)->firstWhere('uuid', $movePageParentUuid))
+            <div class="flex items-center justify-between gap-4 border-y border-zinc-200 py-3 dark:border-zinc-800">
+                <div class="min-w-0">
+                    <p class="text-xs font-medium text-zinc-500">{{ __('Nova putanja') }}</p>
+                    <p class="mt-1 truncate text-sm font-semibold text-zinc-950 dark:text-white">{{ $moveDestination['path'] ?? __('Glavni izbornik') }}</p>
+                </div>
+            </div>
 
             <div class="flex justify-end gap-2">
                 <flux:modal.close><flux:button type="button" variant="ghost">{{ __('Odustani') }}</flux:button></flux:modal.close>
@@ -125,12 +103,25 @@
             </div>
 
             <flux:input wire:model="newPageTitle" :label="__('Naziv stranice')" :placeholder="__('Npr. Projekti, Radionice ili Donacije')" data-required autofocus />
-            <flux:select wire:model="newPageParentUuid" variant="listbox" :label="__('Nadređena stranica')" :description="__('Ostavite prazno za stavku glavnog izbornika.')">
-                <flux:select.option value="">{{ __('Glavna razina') }}</flux:select.option>
-                @foreach ($this->parentPageOptions as $option)
-                    <flux:select.option :value="$option['uuid']">{{ $option['label'] }}</flux:select.option>
-                @endforeach
+            @include('pages::livewire.partials.page-navigation-target-fields', [
+                'typeProperty' => 'newPageNavigationType',
+                'urlProperty' => 'newPageNavigationUrl',
+                'newTabProperty' => 'newPageNavigationNewTab',
+                'currentType' => $newPageNavigationType,
+            ])
+            <flux:select wire:model.live="newPageParentUuid" :label="__('Nadređena stranica')" :description="__('Odaberite razinu i putanju ili ostavite stranicu u glavnom izborniku.')">
+                @include('pages::livewire.partials.hierarchy-parent-options', ['options' => $this->parentPageOptions])
             </flux:select>
+
+            @php($createDestination = collect($this->parentPageOptions)->firstWhere('uuid', $newPageParentUuid))
+            <div class="flex items-center justify-between gap-4 border-y border-zinc-200 py-3 dark:border-zinc-800">
+                <div class="min-w-0">
+                    <p class="text-xs font-medium text-zinc-500">{{ __('Nova putanja') }}</p>
+                    <p class="mt-1 truncate text-sm font-semibold text-zinc-950 dark:text-white">
+                        {{ $createDestination ? $createDestination['path'].' / '.($newPageTitle ?: __('Nova stranica')) : ($newPageTitle ?: __('Glavni izbornik')) }}
+                    </p>
+                </div>
+            </div>
 
             <div class="flex justify-end gap-2">
                 <flux:modal.close><flux:button type="button" variant="ghost">{{ __('Odustani') }}</flux:button></flux:modal.close>
@@ -151,6 +142,14 @@
             <div class="grid gap-5">
                 <flux:input wire:model="pageTitle" :label="__('Naziv')" data-required autofocus />
                 <flux:textarea wire:model="pageExcerpt" :label="__('Opis')" rows="4" />
+                @if (! $pageIsHome)
+                    @include('pages::livewire.partials.page-navigation-target-fields', [
+                        'typeProperty' => 'pageNavigationType',
+                        'urlProperty' => 'pageNavigationUrl',
+                        'newTabProperty' => 'pageNavigationNewTab',
+                        'currentType' => $pageNavigationType,
+                    ])
+                @endif
             </div>
 
             <div class="flex justify-end gap-2">

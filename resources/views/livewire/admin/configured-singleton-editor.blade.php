@@ -114,9 +114,11 @@
         @endif
 
         @if ($this->hasSettingsTab())
-            <flux:tab.panel :name="$this->settingsTabKey()" class="pt-6">
-                @include('pages::livewire.admin.partials.configured-settings-panel')
-            </flux:tab.panel>
+            @foreach ($this->settingsPanels() as $settingsPanel)
+                <flux:tab.panel :name="$settingsPanel['key']" class="pt-6">
+                    @include('pages::livewire.admin.partials.configured-settings-panel', ['settingsPanel' => $settingsPanel])
+                </flux:tab.panel>
+            @endforeach
         @endif
     </flux:tab.group>
 </div>

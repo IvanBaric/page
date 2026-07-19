@@ -205,6 +205,26 @@ it('resolves a configurable public subject page sections and navigation', functi
         'is_visible' => true,
         'sort_order' => 0,
     ]);
+    $city = Page::query()->create([
+        'team_id' => 55,
+        'parent_id' => $about->id,
+        'title' => ['en' => 'City'],
+        'slug' => 'city',
+        'status' => 'published',
+        'is_published' => true,
+        'published_at' => now(),
+        'sort_order' => 2,
+    ]);
+    $projects = Page::query()->create([
+        'team_id' => 55,
+        'parent_id' => $city->id,
+        'title' => ['en' => 'Projects'],
+        'slug' => 'projects',
+        'status' => 'published',
+        'is_published' => true,
+        'published_at' => now(),
+        'sort_order' => 3,
+    ]);
 
     $subject = app(EloquentPublicSiteSubjectResolver::class)->resolve(
         Request::create('/reusable-site/about'),
@@ -220,7 +240,13 @@ it('resolves a configurable public subject page sections and navigation', functi
     expect($resolved['page']->is($about))->toBeTrue()
         ->and($resolved['page']->relationLoaded('visibleSections'))->toBeTrue()
         ->and($resolved['page']->visibleSections)->toHaveCount(1)
-        ->and($resolved['publicPages']->pluck('uuid')->all())->toBe([$home->uuid, $about->uuid]);
+        ->and($resolved['publicPages']->pluck('uuid')->all())->toBe([$home->uuid, $about->uuid, $city->uuid, $projects->uuid]);
+
+    $nested = app(PublicSitePageResolver::class)->resolveExact($subject, 'about/city/projects');
+
+    expect($nested)->not->toBeNull()
+        ->and($nested['page']->is($projects))->toBeTrue()
+        ->and(app(PublicSitePageResolver::class)->resolveExact($subject, 'wrong/city/projects'))->toBeNull();
 
     $subjectModel->forceFill(['is_active' => false])->save();
 
@@ -246,6 +272,10 @@ it('resolves a configurable public subject page sections and navigation', functi
     expect(app(CurrentPublicSite::class)->subject()?->is($subjectModel))->toBeTrue()
         ->and(app(CurrentPublicSite::class)->url())->toBeString()->toEndWith('/test-sites/reusable-site')
         ->and($url->page($subjectModel, 'about'))->toEndWith('/test-sites/reusable-site/about')
+        ->and($url->page($subjectModel, $projects, collect([$home, $about, $city, $projects])))
+        ->toEndWith('/test-sites/reusable-site/about/city/projects')
+        ->and($url->content($subjectModel, $projects, 'first-item', collect([$home, $about, $city, $projects])))
+        ->toEndWith('/test-sites/reusable-site/about/city/projects/first-item')
         ->and($url->contentForSlug('reusable-site', 'about', 'first-item'))
         ->toEndWith('/test-sites/reusable-site/about/first-item');
 });
@@ -541,7 +571,41 @@ it('creates a tenant scoped subpage and exposes parent relationships', function 
         ->and($parent->children()->first()?->is($result->data))->toBeTrue();
 });
 
-it('rejects cross tenant and second level page parents', function (): void {
+it('stores validated page navigation targets and keeps the home page internal', function (): void {
+    app()->bind(TenantResolver::class, PagesCorexisTenantResolverFake::class);
+    PagesCorexisTenantResolverFake::$tenantId = 987;
+
+    $linkResult = app(CreatePageAction::class)->handle([
+        'title' => ['en' => 'Partner portal'],
+        'navigation_type' => 'url',
+        'navigation_url' => 'https://partner.example.com/resources',
+        'navigation_target' => '_blank',
+    ]);
+    $invalidResult = app(CreatePageAction::class)->handle([
+        'title' => ['en' => 'Unsafe link'],
+        'navigation_type' => 'url',
+        'navigation_url' => 'javascript:alert(1)',
+    ]);
+    $homeResult = app(CreatePageAction::class)->handle([
+        'title' => ['en' => 'Home'],
+        'is_home' => true,
+        'navigation_type' => 'url',
+        'navigation_url' => 'https://example.com',
+        'navigation_target' => '_blank',
+    ]);
+
+    expect($linkResult->success)->toBeTrue()
+        ->and($linkResult->data->navigationType())->toBe('url')
+        ->and($linkResult->data->navigationUrl())->toBe('https://partner.example.com/resources')
+        ->and($linkResult->data->navigationTarget())->toBe('_blank')
+        ->and($invalidResult->failed())->toBeTrue()
+        ->and($homeResult->success)->toBeTrue()
+        ->and($homeResult->data->navigationType())->toBe('page')
+        ->and($homeResult->data->navigationUrl())->toBeNull()
+        ->and($homeResult->data->navigationTarget())->toBe('_self');
+});
+
+it('allows three page levels and rejects cross tenant and fourth level parents', function (): void {
     app()->bind(TenantResolver::class, PagesCorexisTenantResolverFake::class);
 
     PagesCorexisTenantResolverFake::$tenantId = 111;
@@ -558,13 +622,19 @@ it('rejects cross tenant and second level page parents', function (): void {
         'title' => ['en' => 'Invalid child'],
         'parent_uuid' => $foreignParent->uuid,
     ]);
-    $secondLevel = app(CreatePageAction::class)->handle([
-        'title' => ['en' => 'Too deep'],
+    $thirdLevel = app(CreatePageAction::class)->handle([
+        'title' => ['en' => 'Product details'],
         'parent_uuid' => $child->uuid,
+    ]);
+    $fourthLevel = app(CreatePageAction::class)->handle([
+        'title' => ['en' => 'Too deep'],
+        'parent_uuid' => $thirdLevel->data->uuid,
     ]);
 
     expect($crossTenant->failed())->toBeTrue()
-        ->and($secondLevel->failed())->toBeTrue();
+        ->and($thirdLevel->success)->toBeTrue()
+        ->and($thirdLevel->data->parent?->is($child))->toBeTrue()
+        ->and($fourthLevel->failed())->toBeTrue();
 });
 
 it('moves and reorders pages between navigation levels', function (): void {
@@ -616,19 +686,50 @@ it('rejects invalid page hierarchy moves', function (): void {
     $home = Page::query()->create(['title' => ['en' => 'Home'], 'is_home' => true]);
     $parent = Page::query()->create(['title' => ['en' => 'Products']]);
     $otherParent = Page::query()->create(['title' => ['en' => 'Services']]);
+    $otherChild = Page::query()->create(['title' => ['en' => 'Consulting'], 'parent_id' => $otherParent->getKey()]);
     Page::query()->create(['title' => ['en' => 'Child'], 'parent_id' => $parent->getKey()]);
 
     PagesCorexisTenantResolverFake::$tenantId = 111;
     $foreignParent = Page::query()->create(['title' => ['en' => 'Foreign']]);
     PagesCorexisTenantResolverFake::$tenantId = 987;
 
+    $tooDeep = app(MovePageAction::class)->handle($parent, $otherChild->uuid, 0);
+    $movedSubtree = app(MovePageAction::class)->handle($parent, $otherParent->uuid, 0);
+
     expect(app(MovePageAction::class)->handle($home, $otherParent->uuid, 0)->failed())->toBeTrue()
-        ->and(app(MovePageAction::class)->handle($parent, $otherParent->uuid, 0)->failed())->toBeTrue()
+        ->and($tooDeep->failed())->toBeTrue()
+        ->and($movedSubtree->success)->toBeTrue()
+        ->and($parent->refresh()->parent_id)->toBe($otherParent->getKey())
+        ->and(app(MovePageAction::class)->handle($otherParent, $parent->children()->firstOrFail()->uuid, 0)->failed())->toBeTrue()
         ->and(app(MovePageAction::class)->handle($otherParent, $foreignParent->uuid, 0)->failed())->toBeTrue();
 
     PagesCorexisTenantResolverFake::$tenantId = 111;
 
     expect(app(MovePageAction::class)->handle($otherParent, null, 0)->failed())->toBeTrue();
+});
+
+it('unpublishes every descendant and hides pages with an unpublished ancestor', function (): void {
+    app()->bind(TenantResolver::class, PagesCorexisTenantResolverFake::class);
+    PagesCorexisTenantResolverFake::$tenantId = 987;
+
+    $parent = Page::query()->create(['title' => ['en' => 'Products']]);
+    $child = Page::query()->create(['title' => ['en' => 'Wood'], 'parent_id' => $parent->getKey()]);
+    $grandchild = Page::query()->create(['title' => ['en' => 'Oak'], 'parent_id' => $child->getKey()]);
+    collect([$parent, $child, $grandchild])->each(fn (Page $page): bool => $page->publish());
+
+    $result = app(UnpublishPageAction::class)->handle($parent);
+
+    expect($result->success)->toBeTrue()
+        ->and($parent->refresh()->is_published)->toBeFalse()
+        ->and($child->refresh()->is_published)->toBeFalse()
+        ->and($grandchild->refresh()->is_published)->toBeFalse();
+
+    expect(app(PublishPageAction::class)->handle($child)->failed())->toBeTrue();
+
+    $child->publish();
+    $grandchild->publish();
+
+    expect(Page::query()->published()->navigationVisible()->pluck('id')->all())->toBe([]);
 });
 
 it('normalizes both page groups when an existing form changes the parent', function (): void {

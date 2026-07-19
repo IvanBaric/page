@@ -23,6 +23,9 @@ class PageArchive extends Component
 {
     use WithPagination;
 
+    #[Locked]
+    public bool $embedded = false;
+
     public string $search = '';
 
     #[Locked]
@@ -42,6 +45,11 @@ class PageArchive extends Component
 
     #[Locked]
     public string $deletingName = '';
+
+    public function mount(bool $embedded = false): void
+    {
+        $this->embedded = $embedded;
+    }
 
     public function updatedSearch(): void
     {
@@ -78,7 +86,9 @@ class PageArchive extends Component
             return;
         }
 
-        $result = $action->handle($this->restoringType, $this->restoringUuid);
+        $restoringType = $this->restoringType;
+        $restoringUuid = $this->restoringUuid;
+        $result = $action->handle($restoringType, $restoringUuid);
 
         if ($result->failed()) {
             Flux::toast(variant: 'danger', text: $result->message);
@@ -92,6 +102,7 @@ class PageArchive extends Component
 
         Flux::modal('archive-restore')->close();
         Flux::toast(variant: 'success', text: $result->message);
+        $this->dispatchPublicRestoreRefresh($restoringType, $restoringUuid);
     }
 
     public function confirmDelete(string $type, string $uuid): void
@@ -184,6 +195,30 @@ class PageArchive extends Component
             ->first();
 
         return $record;
+    }
+
+    private function dispatchPublicRestoreRefresh(string $type, string $uuid): void
+    {
+        if ($type === 'page' || $type === 'section') {
+            $this->dispatch('pages-public-structure-updated', reload: false);
+
+            return;
+        }
+
+        if ($type !== 'item') {
+            return;
+        }
+
+        $itemModel = PagesModels::sectionItem();
+        $item = $itemModel::query()
+            ->with('section')
+            ->where('uuid', $uuid)
+            ->first();
+        $sectionUuid = (string) data_get($item, 'section.uuid');
+
+        if ($sectionUuid !== '') {
+            $this->dispatch('pages-public-section-updated.'.$sectionUuid);
+        }
     }
 
     /** @return Collection<int, array<string, mixed>> */

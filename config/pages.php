@@ -23,6 +23,10 @@ return [
         'guard' => null,
     ],
 
+    'hierarchy' => [
+        'max_depth' => 3,
+    ],
+
     'statuses' => [
         'draft' => ['label' => 'Skica'],
         'published' => ['label' => 'Objavljeno'],
@@ -109,6 +113,7 @@ return [
     ],
 
     'one_page_navigation' => [
+        'enabled' => true,
         'home_section_defaults' => [],
     ],
 
@@ -123,6 +128,7 @@ return [
         'layout' => 'layouts.public',
         'subject_resolver' => null,
         'view_tracker' => null,
+        'seo_data_provider' => null,
         'subject' => [
             'model' => null,
             'request_attribute' => null,
@@ -139,7 +145,9 @@ return [
             'middleware' => ['web'],
             'subject_parameter' => 'subjectSlug',
             'page_parameter' => 'pageSlug',
-            'where' => [],
+            'where' => [
+                'pageSlug' => '[A-Za-z0-9-]+(?:/[A-Za-z0-9-]+){0,2}',
+            ],
         ],
         'content_route' => [
             'enabled' => false,
@@ -147,7 +155,10 @@ return [
             'name' => null,
             'middleware' => ['web'],
             'content_parameter' => 'contentSlug',
-            'where' => [],
+            'where' => [
+                'pageSlug' => '[A-Za-z0-9-]+(?:/[A-Za-z0-9-]+){0,2}',
+                'contentSlug' => '[A-Za-z0-9-]+',
+            ],
         ],
         'content_providers' => [],
     ],

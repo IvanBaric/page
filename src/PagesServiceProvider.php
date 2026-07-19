@@ -25,6 +25,8 @@ use IvanBaric\Pages\Livewire\PublicSite\TemplatePartEditorFlyout;
 use IvanBaric\Pages\Support\AllowPagePublication;
 use IvanBaric\Pages\Support\EloquentPublicSiteSubjectResolver;
 use IvanBaric\Pages\Support\NullPublicPageViewTracker;
+use IvanBaric\Pages\Support\PageHierarchy;
+use IvanBaric\Pages\Support\PageNavigationTree;
 use IvanBaric\Pages\Support\PublicContentProviderRegistry;
 use IvanBaric\Pages\Support\PublicManagementRegistry;
 use Livewire\Livewire;
@@ -52,6 +54,8 @@ final class PagesServiceProvider extends ServiceProvider
         $this->app->singleton(AdminSectionRegistry::class);
         $this->app->singleton(PublicContentProviderRegistry::class);
         $this->app->singleton(PublicManagementRegistry::class);
+        $this->app->singleton(PageHierarchy::class);
+        $this->app->singleton(PageNavigationTree::class);
         $this->app->singleton(PagePublicationGuard::class, function ($app): PagePublicationGuard {
             $guard = config('pages.publication.guard');
 

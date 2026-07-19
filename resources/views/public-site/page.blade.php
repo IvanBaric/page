@@ -10,6 +10,7 @@
     :title="$page->localized('title') ?: __('Stranica')"
     :subject="$subject"
     :organization="$subject"
+    :seo-data="$seoData ?? null"
     :public-pages="$publicPages"
     :template-key="$templateKey"
     :small-header="! (bool) $page->is_home"
@@ -17,7 +18,11 @@
     :small-header-subtitle="($page->localized('excerpt') || $page->localized('content')) ? ($page->localized('excerpt') ?: str($page->localized('content'))->stripTags()->squish()->limit(150)->toString()) : null"
 >
     <main>
-        <x-template-engine::page :page="$page" />
+        @livewire(
+            \IvanBaric\TemplateEngine\Livewire\PublicPage::class,
+            ['page' => $page, 'templateKey' => $templateKey],
+            key('template-engine-public-page-'.$page->uuid)
+        )
     </main>
 
     @php
@@ -33,9 +38,9 @@
                 type="button"
                 x-data
                 x-on:click="Livewire.dispatch('pages-open-public-section-creator')"
-                class="group mx-auto flex min-h-32 w-full max-w-6xl cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-zinc-300 bg-zinc-50/70 px-6 text-center transition duration-200 hover:border-zinc-400 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900/50 dark:hover:border-zinc-600 dark:hover:bg-zinc-900"
+                class="group mx-auto flex min-h-32 w-full max-w-6xl cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-zinc-300 bg-zinc-50/70 px-6 text-center transition duration-200 hover:border-[color:var(--niva-primary-200)] hover:bg-[color:var(--niva-primary-50)] dark:border-zinc-700 dark:bg-zinc-900/50 dark:hover:border-[color:var(--niva-primary-700)] dark:hover:bg-zinc-900"
             >
-                <span class="grid size-10 place-items-center rounded-full bg-white text-accent shadow-sm ring-1 ring-zinc-950/5 transition group-hover:scale-105 dark:bg-zinc-950 dark:ring-white/10">
+                <span class="grid size-10 place-items-center rounded-full bg-white text-[color:var(--niva-primary-700)] shadow-sm ring-1 ring-[color:var(--niva-primary-100)] transition group-hover:scale-105 group-hover:bg-[color:var(--niva-primary-50)] group-hover:text-[color:var(--niva-primary-800)] dark:bg-zinc-950 dark:text-[color:var(--niva-primary-300)] dark:ring-[color:var(--niva-primary-900)] dark:group-hover:bg-zinc-900 dark:group-hover:text-[color:var(--niva-primary-200)]">
                     <flux:icon name="plus" class="size-5" />
                 </span>
                 <span>

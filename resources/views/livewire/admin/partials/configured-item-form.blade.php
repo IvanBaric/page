@@ -9,7 +9,14 @@
     $usesSidebarGrid = $hasSidebar && ($inlineForm || ! $modalFlyout);
 @endphp
 
-<form wire:submit="saveItem" wire:loading.class="admin-panel-content-loading" wire:target="saveItem,saveAllChanges" @class(['relative min-w-0', 'space-y-8' => ! $inlineForm, 'space-y-6' => $inlineForm])>
+<form
+    wire:submit="saveItem"
+    wire:loading.class="admin-panel-content-loading"
+    wire:target="saveItem,saveAllChanges"
+    x-data="{ mediaUploading: false }"
+    x-on:admin-media-upload-state="mediaUploading = $event.detail.uploading"
+    @class(['relative min-w-0', 'space-y-8' => ! $inlineForm, 'space-y-6' => $inlineForm])
+>
     <x-admin-ui::loading-overlay target="saveItem,saveAllChanges" :text="__('Spremanje...')" />
     @if ($showFormHeader)
         <div>
@@ -22,7 +29,7 @@
         <div class="min-w-0 space-y-5">
             @if ($showTitle && $showSubtitle && ! $singleColumnFields)
                 <div @class(['grid gap-5', 'md:grid-cols-2' => $subtitleType !== 'textarea'])>
-                    <flux:input wire:model="form.title" :label="$titleLabel" data-required />
+                    <flux:input wire:model.live.debounce.300ms="form.title" :label="$titleLabel" data-required />
                     @if ($subtitleType === 'textarea')
                         <flux:textarea wire:model="form.subtitle" :label="$subtitleLabel" :rows="$subtitleRows" />
                     @else
@@ -30,14 +37,14 @@
                     @endif
                 </div>
             @elseif ($showTitle && $showSubtitle)
-                <flux:input wire:model="form.title" :label="$titleLabel" data-required />
+                <flux:input wire:model.live.debounce.300ms="form.title" :label="$titleLabel" data-required />
                 @if ($subtitleType === 'textarea')
                     <flux:textarea wire:model="form.subtitle" :label="$subtitleLabel" :rows="$subtitleRows" />
                 @else
                     <flux:input wire:model="form.subtitle" :label="$subtitleLabel" />
                 @endif
             @elseif ($showTitle)
-                <flux:input wire:model="form.title" :label="$titleLabel" data-required />
+                <flux:input wire:model.live.debounce.300ms="form.title" :label="$titleLabel" data-required />
             @elseif ($showSubtitle)
                 @if ($subtitleType === 'textarea')
                     <flux:textarea wire:model="form.subtitle" :label="$subtitleLabel" :rows="$subtitleRows" />
@@ -154,7 +161,7 @@
                     <flux:button type="button" variant="ghost">{{ __('Odustani') }}</flux:button>
                 </flux:modal.close>
             @endif
-            <x-admin-ui::submit-button target="saveItem">{{ $submitLabel }}</x-admin-ui::submit-button>
+            <x-admin-ui::submit-button target="saveItem" x-bind:disabled="mediaUploading">{{ $submitLabel }}</x-admin-ui::submit-button>
         </div>
     @endunless
 </form>

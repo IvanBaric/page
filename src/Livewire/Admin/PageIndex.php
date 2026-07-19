@@ -19,6 +19,8 @@ use IvanBaric\Pages\Actions\TogglePagePublishedAction;
 use IvanBaric\Pages\Actions\UpdatePageAction;
 use IvanBaric\Pages\Admin\AdminSectionRegistry;
 use IvanBaric\Pages\Models\Page;
+use IvanBaric\Pages\Rules\NavigationUrl;
+use IvanBaric\Pages\Support\PageHierarchy;
 use IvanBaric\Pages\Support\PagesConfigResolver;
 use IvanBaric\Pages\Support\PagesModels;
 use Livewire\Attributes\Computed;
@@ -46,9 +48,23 @@ class PageIndex extends Component
 
     public ?string $pageParentUuid = null;
 
+    public string $pageNavigationType = 'page';
+
+    public string $pageNavigationUrl = '';
+
+    public bool $pageNavigationNewTab = false;
+
+    public bool $pageIsHome = false;
+
     public string $newPageTitle = '';
 
     public ?string $newPageParentUuid = null;
+
+    public string $newPageNavigationType = 'page';
+
+    public string $newPageNavigationUrl = '';
+
+    public bool $newPageNavigationNewTab = false;
 
     #[Locked]
     public ?string $deletingPageUuid = null;
@@ -99,31 +115,35 @@ class PageIndex extends Component
 
     public function openCreatePage(): void
     {
-        $this->reset('newPageTitle', 'newPageParentUuid');
+        $this->reset('newPageTitle', 'newPageParentUuid', 'newPageNavigationType', 'newPageNavigationUrl', 'newPageNavigationNewTab');
         Flux::modal('page-create-form')->show();
     }
 
     public function cancelCreatePage(): void
     {
-        $this->reset('newPageTitle', 'newPageParentUuid');
+        $this->reset('newPageTitle', 'newPageParentUuid', 'newPageNavigationType', 'newPageNavigationUrl', 'newPageNavigationNewTab');
     }
 
     public function editPage(string $uuid): void
     {
         $page = $this->editablePage($uuid);
 
-        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt', 'pageParentUuid');
+        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt', 'pageParentUuid', 'pageNavigationType', 'pageNavigationUrl', 'pageNavigationNewTab', 'pageIsHome');
         $this->editingPageUuid = $page->uuid;
         $this->pageTitle = $page->localized('title');
         $this->pageExcerpt = $page->localized('excerpt') ?: $page->localized('content');
         $this->pageParentUuid = $page->parent?->uuid;
+        $this->pageNavigationType = $page->navigationType();
+        $this->pageNavigationUrl = (string) ($page->navigationUrl() ?? '');
+        $this->pageNavigationNewTab = $page->navigationTarget() === '_blank';
+        $this->pageIsHome = (bool) $page->is_home;
 
         Flux::modal('page-title-form')->show();
     }
 
     public function cancelPageTitleForm(): void
     {
-        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt', 'pageParentUuid');
+        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt', 'pageParentUuid', 'pageNavigationType', 'pageNavigationUrl', 'pageNavigationNewTab', 'pageIsHome');
     }
 
     public function savePage(UpdatePageAction $action): void
@@ -132,6 +152,9 @@ class PageIndex extends Component
             'pageTitle' => ['required', 'string', 'max:120'],
             'pageExcerpt' => ['nullable', 'string', 'max:500'],
             'pageParentUuid' => ['nullable', 'uuid'],
+            'pageNavigationType' => ['required', 'string', 'in:page,url'],
+            'pageNavigationUrl' => ['nullable', 'required_if:pageNavigationType,url', 'string', 'max:2048', new NavigationUrl],
+            'pageNavigationNewTab' => ['boolean'],
         ], [], [
             'pageTitle' => __('naziv stranice'),
             'pageExcerpt' => __('kratki opis'),
@@ -157,6 +180,9 @@ class PageIndex extends Component
             'published_at' => $page->getAttribute('published_at'),
             'sort_order' => (int) $page->getAttribute('sort_order'),
             'settings' => $page->getAttribute('settings'),
+            'navigation_type' => $page->is_home ? 'page' : (string) $validated['pageNavigationType'],
+            'navigation_url' => $page->is_home || $validated['pageNavigationType'] !== 'url' ? null : trim((string) $validated['pageNavigationUrl']),
+            'navigation_target' => ! $page->is_home && $validated['pageNavigationType'] === 'url' && $validated['pageNavigationNewTab'] ? '_blank' : '_self',
             'lock_version' => (int) $page->getAttribute('lock_version'),
             'parent_uuid' => filled($validated['pageParentUuid'] ?? null) ? (string) $validated['pageParentUuid'] : null,
         ]);
@@ -167,7 +193,7 @@ class PageIndex extends Component
             return;
         }
 
-        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt', 'pageParentUuid');
+        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt', 'pageParentUuid', 'pageNavigationType', 'pageNavigationUrl', 'pageNavigationNewTab', 'pageIsHome');
         unset($this->pages);
 
         Flux::modal('page-title-form')->close();
@@ -179,6 +205,9 @@ class PageIndex extends Component
         $validated = $this->validate([
             'newPageTitle' => ['required', 'string', 'max:120'],
             'newPageParentUuid' => ['nullable', 'uuid'],
+            'newPageNavigationType' => ['required', 'string', 'in:page,url'],
+            'newPageNavigationUrl' => ['nullable', 'required_if:newPageNavigationType,url', 'string', 'max:2048', new NavigationUrl],
+            'newPageNavigationNewTab' => ['boolean'],
         ], [], [
             'newPageTitle' => __('naziv stranice'),
             'newPageParentUuid' => __('nadređena stranica'),
@@ -197,6 +226,9 @@ class PageIndex extends Component
             'is_home' => false,
             'is_published' => true,
             'published_at' => now(),
+            'navigation_type' => (string) $validated['newPageNavigationType'],
+            'navigation_url' => $validated['newPageNavigationType'] === 'url' ? trim((string) $validated['newPageNavigationUrl']) : null,
+            'navigation_target' => $validated['newPageNavigationType'] === 'url' && $validated['newPageNavigationNewTab'] ? '_blank' : '_self',
             'sort_order' => ((int) $model::query()->max('sort_order')) + 1,
             'parent_uuid' => filled($validated['newPageParentUuid'] ?? null) ? (string) $validated['newPageParentUuid'] : null,
         ]);
@@ -209,7 +241,7 @@ class PageIndex extends Component
 
         $page = $result->data;
 
-        $this->reset('newPageTitle', 'newPageParentUuid');
+        $this->reset('newPageTitle', 'newPageParentUuid', 'newPageNavigationType', 'newPageNavigationUrl', 'newPageNavigationNewTab');
         unset($this->pages, $this->stats);
 
         Flux::modal('page-create-form')->close();
@@ -325,6 +357,10 @@ class PageIndex extends Component
 
     public function publicPageUrl(Page $page): string
     {
+        if ($page->navigationUrl() !== null) {
+            return $page->navigationUrl();
+        }
+
         $subject = $this->organization();
         $route = (string) config('pages.admin_index.public_route.name', '');
 
@@ -382,24 +418,21 @@ class PageIndex extends Component
             ->get();
     }
 
-    /** @return array<int, array{uuid: string, label: string}> */
+    /** @return array<int, array{uuid: string, label: string, path: string, depth: int, resulting_depth: int}> */
     #[Computed]
     public function parentPageOptions(): array
     {
         $model = PagesModels::page();
 
-        return $model::query()
+        $pages = $model::query()
             ->tap(fn (Builder $query): Builder => $this->adminPagesQuery($query))
-            ->whereNull('parent_id')
-            ->where('is_home', false)
-            ->when($this->editingPageUuid, fn (Builder $query): Builder => $query->where('uuid', '!=', $this->editingPageUuid))
             ->ordered()
-            ->get()
-            ->map(fn (Page $page): array => [
-                'uuid' => (string) $page->uuid,
-                'label' => $page->localized('title') ?: (string) $page->slug,
-            ])
-            ->all();
+            ->get();
+        $editingPage = $this->editingPageUuid
+            ? $pages->firstWhere('uuid', $this->editingPageUuid)
+            : null;
+
+        return app(PageHierarchy::class)->parentOptions($pages, $editingPage instanceof Page ? $editingPage : null);
     }
 
     #[Computed]

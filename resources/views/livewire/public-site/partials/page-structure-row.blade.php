@@ -1,5 +1,6 @@
 @php
-    $isChild = (bool) ($isChild ?? false);
+    $depth = (int) ($depth ?? (($isChild ?? false) ? 2 : 1));
+    $isChild = $depth > 1;
     $showSectionEditor = (bool) ($showSectionEditor ?? false);
     $showPublicPreview = (bool) ($showPublicPreview ?? false);
 @endphp
@@ -7,12 +8,17 @@
 <article
     @class([
         'grid grid-cols-1 gap-4 px-5 py-4 transition hover:bg-zinc-50/80 dark:hover:bg-white/[0.03] lg:grid-cols-[3rem_minmax(0,1fr)_8rem_8rem_7rem] lg:items-center',
-        'bg-zinc-50/60 pl-10 dark:bg-zinc-900/30 lg:pl-10' => $isChild,
+        'bg-zinc-50/60 dark:bg-zinc-900/30' => $depth === 2,
+        'bg-zinc-100/60 dark:bg-zinc-900/60' => $depth === 3,
     ])
 >
     <div>
         <flux:tooltip :content="$isChild ? __('Povucite za promjenu redoslijeda ili nadređene stranice') : __('Povucite za promjenu redoslijeda')">
-            <span wire:sort:handle class="inline-flex size-10 cursor-grab items-center justify-center rounded-md bg-zinc-100 text-zinc-500 ring-1 ring-zinc-950/5 transition hover:bg-zinc-200 hover:text-zinc-700 active:cursor-grabbing dark:bg-zinc-900 dark:ring-white/10 dark:hover:bg-zinc-800">
+            <span wire:sort:handle @class([
+                'inline-flex size-10 cursor-grab items-center justify-center rounded-md bg-zinc-100 text-zinc-500 ring-1 ring-zinc-950/5 transition hover:bg-zinc-200 hover:text-zinc-700 active:cursor-grabbing dark:bg-zinc-900 dark:ring-white/10 dark:hover:bg-zinc-800',
+                'ml-3' => $depth === 2,
+                'ml-6' => $depth === 3,
+            ])>
                 <flux:icon :name="$isChild ? 'arrow-turn-down-right' : 'bars-3'" class="size-4" />
             </span>
         </flux:tooltip>
@@ -27,12 +33,11 @@
             @else
                 <p class="truncate text-[15px] font-semibold text-zinc-950 dark:text-white">{{ $listedPage->localized('title') ?: __('Neimenovana stranica') }}</p>
             @endif
-
-            @if ($isChild)
-                <span class="shrink-0 rounded-full bg-zinc-200 px-2 py-0.5 text-[11px] font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{{ __('Podstranica') }}</span>
+            @if ($listedPage->navigationType() === 'url')
+                <flux:badge size="sm" icon="link">{{ __('Poveznica') }}</flux:badge>
             @endif
         </div>
-        <p class="mt-1 truncate text-[13px] text-zinc-500 dark:text-zinc-400">{{ $listedPage->localized('excerpt') ?: $listedPage->slug }}</p>
+        <p class="mt-1 truncate text-[13px] text-zinc-500 dark:text-zinc-400">{{ $listedPage->navigationUrl() ?: ($listedPage->localized('excerpt') ?: $listedPage->slug) }}</p>
     </div>
 
     <div class="text-sm tabular-nums text-zinc-600 dark:text-zinc-300">
@@ -59,7 +64,7 @@
                 @endif
 
                 <flux:menu.item as="button" type="button" wire:click="editPage('{{ $listedPage->uuid }}')" icon="pencil-square">
-                    {{ __('Promijeni naziv') }}
+                    {{ __('Uredi stranicu') }}
                 </flux:menu.item>
 
                 @if (! $listedPage->is_home)

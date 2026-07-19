@@ -242,7 +242,7 @@ final class ConfiguredSingletonEditor extends Component
 
     public function hasSettingsTab(): bool
     {
-        return $this->settingsTab() instanceof Tab;
+        return $this->settingsTabs() !== [];
     }
 
     public function formTabKey(): string
@@ -308,9 +308,22 @@ final class ConfiguredSingletonEditor extends Component
     /** @return array<int, array<string, mixed>> */
     public function settingsFields(): array
     {
+        $tab = $this->settingsTab();
+
+        return $tab instanceof Tab ? $this->settingsFieldsForTab($tab) : [];
+    }
+
+    /** @return array<int, array{key: string, heading: string, description: string, fields: array<int, array<string, mixed>>}> */
+    public function settingsPanels(): array
+    {
         return array_map(
-            fn (Field $field): array => $this->fieldConfig($field),
-            $this->settingsTab()?->fieldsValue() ?? [],
+            fn (Tab $tab): array => [
+                'key' => $tab->key(),
+                'heading' => (string) ($tab->optionValue('heading', __('Postavke')) ?? __('Postavke')),
+                'description' => (string) ($tab->optionValue('description', __('Uredite postavke prikaza.')) ?? __('Uredite postavke prikaza.')),
+                'fields' => $this->settingsFieldsForTab($tab),
+            ],
+            $this->settingsTabs(),
         );
     }
 
@@ -398,7 +411,7 @@ final class ConfiguredSingletonEditor extends Component
         $data = $this->storedData();
 
         foreach ($validated as $key => $value) {
-            $field = $this->settingsTab()?->field($key);
+            $field = $this->settingsField($key);
 
             if (! $field instanceof Field) {
                 continue;
@@ -467,22 +480,34 @@ final class ConfiguredSingletonEditor extends Component
     /** @return array<string, mixed> */
     private function validatedSettingsForm(): array
     {
+        $fields = $this->settingsFieldsValue();
+
+        if ($fields === []) {
+            return [];
+        }
+
         $rules = [];
         $attributes = [];
 
-        foreach ($this->settingsTab()?->fieldsValue() ?? [] as $field) {
-            $rules['settingsForm.'.$field->key()] = $this->rulesForField($field);
+        foreach ($fields as $field) {
+            $fieldRules = $this->rulesForField($field);
+
+            if ($fieldRules !== []) {
+                $rules['settingsForm.'.$field->key()] = $fieldRules;
+            }
 
             if ($field->labelValue() !== '') {
                 $attributes['settingsForm.'.$field->key()] = $field->labelValue();
             }
         }
 
-        $validated = $this->validate($rules, array_filter([
-            'required' => $this->definition()?->message('required'),
-        ]), $attributes);
+        if ($rules !== []) {
+            $this->validate($rules, array_filter([
+                'required' => $this->definition()?->message('required'),
+            ]), $attributes);
+        }
 
-        return (array) data_get($validated, 'settingsForm', []);
+        return $this->settingsForm;
     }
 
     /**
@@ -493,7 +518,7 @@ final class ConfiguredSingletonEditor extends Component
     {
         $form = [];
 
-        foreach ($this->settingsTab()?->fieldsValue() ?? [] as $field) {
+        foreach ($this->allSettingsFieldsValue() as $field) {
             $form[$field->key()] = data_get($data, $this->fieldStoragePath($field), $this->defaultValue($field));
         }
 
@@ -669,6 +694,15 @@ final class ConfiguredSingletonEditor extends Component
         return $this->definition()?->settingsTab();
     }
 
+    /** @return array<int, Tab> */
+    private function settingsTabs(): array
+    {
+        return array_values(array_filter(
+            $this->definition()?->settingsTabs() ?? [],
+            fn (Tab $tab): bool => $this->isConditionVisible($tab->optionValue('visible_when')),
+        ));
+    }
+
     private function storagePath(): string
     {
         return (string) ($this->definition()?->optionValue('storage', 'settings') ?? 'settings');
@@ -794,9 +828,15 @@ final class ConfiguredSingletonEditor extends Component
 
     private function fieldHasDependents(string $fieldKey): bool
     {
-        foreach ($this->settingsTab()?->fieldsValue() ?? [] as $field) {
-            if ((string) data_get($field->optionValue('visible_when'), 'field') === $fieldKey) {
+        foreach ($this->definition()?->tabsValue() ?? [] as $tab) {
+            if ((string) data_get($tab->optionValue('visible_when'), 'field') === $fieldKey) {
                 return true;
+            }
+
+            foreach ($tab->fieldsValue() as $field) {
+                if ((string) data_get($field->optionValue('visible_when'), 'field') === $fieldKey) {
+                    return true;
+                }
             }
         }
 
@@ -807,6 +847,54 @@ final class ConfiguredSingletonEditor extends Component
         }
 
         return false;
+    }
+
+    /** @return array<int, Field> */
+    private function settingsFieldsValue(): array
+    {
+        if ($this->settingsTabs() === []) {
+            return [];
+        }
+
+        return array_merge(...array_map(
+            static fn (Tab $tab): array => $tab->fieldsValue(),
+            $this->settingsTabs(),
+        ));
+    }
+
+    /** @return array<int, Field> */
+    private function allSettingsFieldsValue(): array
+    {
+        $tabs = array_values($this->definition()?->settingsTabs() ?? []);
+
+        if ($tabs === []) {
+            return [];
+        }
+
+        return array_merge(...array_map(
+            static fn (Tab $tab): array => $tab->fieldsValue(),
+            $tabs,
+        ));
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function settingsFieldsForTab(Tab $tab): array
+    {
+        return array_map(
+            fn (Field $field): array => $this->fieldConfig($field),
+            $tab->fieldsValue(),
+        );
+    }
+
+    private function settingsField(string $key): ?Field
+    {
+        foreach ($this->settingsFieldsValue() as $field) {
+            if ($field->key() === $key) {
+                return $field;
+            }
+        }
+
+        return null;
     }
 
     /** @return array<int, mixed> */

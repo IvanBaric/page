@@ -18,6 +18,8 @@ use IvanBaric\Pages\Actions\ReorderPageAction;
 use IvanBaric\Pages\Actions\TogglePagePublishedAction;
 use IvanBaric\Pages\Actions\UpdatePageAction;
 use IvanBaric\Pages\Models\Page;
+use IvanBaric\Pages\Rules\NavigationUrl;
+use IvanBaric\Pages\Support\PageHierarchy;
 use IvanBaric\Pages\Support\PagesConfigResolver;
 use IvanBaric\Pages\Support\PagesModels;
 use Livewire\Attributes\Computed;
@@ -55,11 +57,25 @@ final class PageStructureFlyout extends Component
 
     public ?string $newPageParentUuid = null;
 
+    public string $newPageNavigationType = 'page';
+
+    public string $newPageNavigationUrl = '';
+
+    public bool $newPageNavigationNewTab = false;
+
     public string $pageTitle = '';
 
     public string $pageExcerpt = '';
 
     public ?string $pageParentUuid = null;
+
+    public string $pageNavigationType = 'page';
+
+    public string $pageNavigationUrl = '';
+
+    public bool $pageNavigationNewTab = false;
+
+    public bool $pageIsHome = false;
 
     public ?string $movePageParentUuid = null;
 
@@ -141,6 +157,7 @@ final class PageStructureFlyout extends Component
 
         unset($this->pages);
         $this->toastFromResult($result);
+        $this->dispatchStructureRefreshIfSuccessful($result);
     }
 
     public function movePageInStructure(string $pageUuid, int $position, string $groupId, MovePageAction $action): void
@@ -149,10 +166,21 @@ final class PageStructureFlyout extends Component
         corexis_authorize('pages.update', $page);
 
         $parentUuid = $this->parentUuidFromGroup($groupId);
+
+        if ($parentUuid !== null) {
+            $parent = $this->findPage($parentUuid);
+            abort_if(
+                $parent->is($page)
+                || in_array($parent->getKey(), app(PageHierarchy::class)->descendantIds($page, $this->pages), true),
+                422,
+            );
+        }
+
         $result = $action->handle($page, $parentUuid, $position);
 
         unset($this->pages, $this->parentPageOptions, $this->movePageOptions);
         $this->toastFromResult($result);
+        $this->dispatchStructureRefreshIfSuccessful($result);
     }
 
     public function togglePublished(string $pageUuid, TogglePagePublishedAction $action): void
@@ -164,6 +192,8 @@ final class PageStructureFlyout extends Component
 
         unset($this->pages);
         $this->toastFromResult($result);
+
+        $this->dispatchStructureRefreshIfSuccessful($result);
     }
 
     public function editPage(string $pageUuid): void
@@ -171,18 +201,22 @@ final class PageStructureFlyout extends Component
         $page = $this->findPage($pageUuid);
         corexis_authorize('pages.update', $page);
 
-        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt', 'pageParentUuid');
+        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt', 'pageParentUuid', 'pageNavigationType', 'pageNavigationUrl', 'pageNavigationNewTab', 'pageIsHome');
         $this->editingPageUuid = (string) $page->uuid;
         $this->pageTitle = $page->localized('title');
         $this->pageExcerpt = $page->localized('excerpt') ?: $page->localized('content');
         $this->pageParentUuid = $page->parent?->uuid;
+        $this->pageNavigationType = $page->navigationType();
+        $this->pageNavigationUrl = (string) ($page->navigationUrl() ?? '');
+        $this->pageNavigationNewTab = $page->navigationTarget() === '_blank';
+        $this->pageIsHome = (bool) $page->is_home;
 
         Flux::modal('public-page-title-form')->show();
     }
 
     public function cancelPageEditor(): void
     {
-        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt', 'pageParentUuid');
+        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt', 'pageParentUuid', 'pageNavigationType', 'pageNavigationUrl', 'pageNavigationNewTab', 'pageIsHome');
     }
 
     public function openPageMover(string $pageUuid): void
@@ -242,6 +276,7 @@ final class PageStructureFlyout extends Component
 
         Flux::modal('public-page-move')->close();
         $this->toastFromResult($result);
+        $this->dispatch('pages-public-structure-updated', reload: false);
     }
 
     public function savePage(UpdatePageAction $action): void
@@ -250,6 +285,9 @@ final class PageStructureFlyout extends Component
             'pageTitle' => ['required', 'string', 'max:120'],
             'pageExcerpt' => ['nullable', 'string', 'max:500'],
             'pageParentUuid' => ['nullable', 'uuid'],
+            'pageNavigationType' => ['required', 'string', 'in:page,url'],
+            'pageNavigationUrl' => ['nullable', 'required_if:pageNavigationType,url', 'string', 'max:2048', new NavigationUrl],
+            'pageNavigationNewTab' => ['boolean'],
         ], [], [
             'pageTitle' => __('naziv stranice'),
             'pageExcerpt' => __('kratki opis'),
@@ -274,6 +312,9 @@ final class PageStructureFlyout extends Component
             'published_at' => $page->getAttribute('published_at'),
             'sort_order' => (int) $page->getAttribute('sort_order'),
             'settings' => $page->getAttribute('settings'),
+            'navigation_type' => $page->is_home ? 'page' : (string) $validated['pageNavigationType'],
+            'navigation_url' => $page->is_home || $validated['pageNavigationType'] !== 'url' ? null : trim((string) $validated['pageNavigationUrl']),
+            'navigation_target' => ! $page->is_home && $validated['pageNavigationType'] === 'url' && $validated['pageNavigationNewTab'] ? '_blank' : '_self',
             'lock_version' => (int) $page->getAttribute('lock_version'),
             'parent_uuid' => filled($validated['pageParentUuid'] ?? null) ? (string) $validated['pageParentUuid'] : null,
         ]);
@@ -284,10 +325,11 @@ final class PageStructureFlyout extends Component
             return;
         }
 
-        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt', 'pageParentUuid');
+        $this->reset('editingPageUuid', 'pageTitle', 'pageExcerpt', 'pageParentUuid', 'pageNavigationType', 'pageNavigationUrl', 'pageNavigationNewTab', 'pageIsHome');
         unset($this->pages);
 
         Flux::modal('public-page-title-form')->close();
+        $this->dispatch('pages-public-structure-updated', reload: false);
         Flux::toast(variant: 'success', text: __('Naziv stranice je spremljen.'));
     }
 
@@ -325,6 +367,7 @@ final class PageStructureFlyout extends Component
 
         Flux::modal('public-page-delete')->close();
         $this->toastFromResult($result);
+        $this->dispatchStructureRefreshIfSuccessful($result);
     }
 
     public function canDeletePage(Page $page): bool
@@ -346,13 +389,13 @@ final class PageStructureFlyout extends Component
 
     public function openPageCreator(): void
     {
-        $this->reset('newPageTitle', 'newPageParentUuid');
+        $this->reset('newPageTitle', 'newPageParentUuid', 'newPageNavigationType', 'newPageNavigationUrl', 'newPageNavigationNewTab');
         Flux::modal('public-page-create')->show();
     }
 
     public function cancelPageCreator(): void
     {
-        $this->reset('newPageTitle', 'newPageParentUuid');
+        $this->reset('newPageTitle', 'newPageParentUuid', 'newPageNavigationType', 'newPageNavigationUrl', 'newPageNavigationNewTab');
     }
 
     public function createPage(CreatePageAction $action): void
@@ -360,6 +403,9 @@ final class PageStructureFlyout extends Component
         $validated = $this->validate([
             'newPageTitle' => ['required', 'string', 'max:120'],
             'newPageParentUuid' => ['nullable', 'uuid'],
+            'newPageNavigationType' => ['required', 'string', 'in:page,url'],
+            'newPageNavigationUrl' => ['nullable', 'required_if:newPageNavigationType,url', 'string', 'max:2048', new NavigationUrl],
+            'newPageNavigationNewTab' => ['boolean'],
         ], [], [
             'newPageTitle' => __('naziv stranice'),
             'newPageParentUuid' => __('nadređena stranica'),
@@ -377,6 +423,9 @@ final class PageStructureFlyout extends Component
             'is_home' => false,
             'is_published' => true,
             'published_at' => now(),
+            'navigation_type' => (string) $validated['newPageNavigationType'],
+            'navigation_url' => $validated['newPageNavigationType'] === 'url' ? trim((string) $validated['newPageNavigationUrl']) : null,
+            'navigation_target' => $validated['newPageNavigationType'] === 'url' && $validated['newPageNavigationNewTab'] ? '_blank' : '_self',
             'sort_order' => ((int) $model::query()->forTenant($this->tenantId)->max('sort_order')) + 1,
             'parent_uuid' => filled($validated['newPageParentUuid'] ?? null) ? (string) $validated['newPageParentUuid'] : null,
         ]);
@@ -387,11 +436,11 @@ final class PageStructureFlyout extends Component
             return;
         }
 
-        $this->reset('newPageTitle', 'newPageParentUuid');
+        $this->reset('newPageTitle', 'newPageParentUuid', 'newPageNavigationType', 'newPageNavigationUrl', 'newPageNavigationNewTab');
         unset($this->pages);
         Flux::modal('public-page-create')->close();
         Flux::toast(variant: 'success', text: __('Stranica je izrađena.'));
-        $this->dispatch('pages-public-structure-updated');
+        $this->dispatch('pages-public-structure-updated', reload: false);
     }
 
     public function render(): View
@@ -409,7 +458,7 @@ final class PageStructureFlyout extends Component
 
         $model = PagesModels::page();
 
-        $columns = ['id', 'team_id', 'parent_id', 'uuid', 'title', 'excerpt', 'content', 'slug', 'status', 'is_home', 'is_published', 'published_at', 'sort_order', 'template', 'settings', 'lock_version'];
+        $columns = ['id', 'team_id', 'parent_id', 'uuid', 'title', 'excerpt', 'content', 'slug', 'status', 'navigation_type', 'navigation_url', 'navigation_target', 'is_home', 'is_published', 'published_at', 'sort_order', 'template', 'settings', 'lock_version'];
 
         if (Schema::hasColumn(PagesConfigResolver::pagesTable(), 'page_key')) {
             $columns[] = 'page_key';
@@ -425,16 +474,7 @@ final class PageStructureFlyout extends Component
             ->ordered()
             ->get();
 
-        $roots = $pages->whereNull('parent_id')->values();
-        $nested = $roots->flatMap(fn (Page $root): array => [
-            $root,
-            ...$pages->where('parent_id', $root->getKey())->values()->all(),
-        ]);
-
-        return new Collection($nested
-            ->concat($pages->whereNotNull('parent_id')->whereNotIn('id', $nested->pluck('id')))
-            ->values()
-            ->all());
+        return new Collection(app(PageHierarchy::class)->flatten($pages)->all());
     }
 
     #[Computed]
@@ -445,23 +485,18 @@ final class PageStructureFlyout extends Component
             : $this->findPage($this->selectedPageUuid);
     }
 
-    /** @return array<int, array{uuid: string, label: string}> */
+    /** @return array<int, array{uuid: string, label: string, path: string, depth: int, resulting_depth: int}> */
     #[Computed]
     public function parentPageOptions(): array
     {
-        return $this->pages
-            ->filter(fn (Page $page): bool => ! $page->is_home
-                && $page->parent_id === null
-                && (string) $page->uuid !== (string) $this->editingPageUuid)
-            ->map(fn (Page $page): array => [
-                'uuid' => (string) $page->uuid,
-                'label' => $page->localized('title') ?: (string) $page->slug,
-            ])
-            ->values()
-            ->all();
+        $editingPage = $this->editingPageUuid
+            ? $this->pages->firstWhere('uuid', $this->editingPageUuid)
+            : null;
+
+        return app(PageHierarchy::class)->parentOptions($this->pages, $editingPage instanceof Page ? $editingPage : null);
     }
 
-    /** @return array<int, array{uuid: string, label: string}> */
+    /** @return array<int, array{uuid: string, label: string, path: string, depth: int, resulting_depth: int}> */
     #[Computed]
     public function movePageOptions(): array
     {
@@ -469,20 +504,7 @@ final class PageStructureFlyout extends Component
             ? null
             : $this->pages->firstWhere('uuid', $this->movingPageUuid);
 
-        if ($movingPage?->getAttribute('children_exists')) {
-            return [];
-        }
-
-        return $this->pages
-            ->filter(fn (Page $page): bool => ! $page->is_home
-                && $page->parent_id === null
-                && (string) $page->uuid !== (string) $this->movingPageUuid)
-            ->map(fn (Page $page): array => [
-                'uuid' => (string) $page->uuid,
-                'label' => $page->localized('title') ?: (string) $page->slug,
-            ])
-            ->values()
-            ->all();
+        return app(PageHierarchy::class)->parentOptions($this->pages, $movingPage instanceof Page ? $movingPage : null);
     }
 
     private function findPage(string $pageUuid): Page
@@ -501,7 +523,11 @@ final class PageStructureFlyout extends Component
         }
 
         $parent = $this->findPage($groupId);
-        abort_unless($parent->parent_id === null && ! $parent->is_home, 422);
+        abort_unless(
+            ! $parent->is_home
+            && app(PageHierarchy::class)->depth($parent, $this->pages) < app(PageHierarchy::class)->maxDepth(),
+            422,
+        );
 
         return (string) $parent->uuid;
     }
@@ -513,9 +539,23 @@ final class PageStructureFlyout extends Component
         }
 
         $parent = $this->findPage($parentUuid);
-        abort_unless($parent->parent_id === null && ! $parent->is_home, 422);
+        abort_unless(
+            ! $parent->is_home
+            && app(PageHierarchy::class)->depth($parent, $this->pages) < app(PageHierarchy::class)->maxDepth(),
+            422,
+        );
 
         return $this->pages->where('parent_id', $parent->getKey())->count();
+    }
+
+    public function pageDepth(Page $page): int
+    {
+        return app(PageHierarchy::class)->depth($page, $this->pages);
+    }
+
+    public function maxPageDepth(): int
+    {
+        return app(PageHierarchy::class)->maxDepth();
     }
 
     private function resolveRootPage(): Page
@@ -533,6 +573,10 @@ final class PageStructureFlyout extends Component
 
     public function publicPageUrl(Page $page): string
     {
+        if ($page->navigationUrl() !== null) {
+            return $page->navigationUrl();
+        }
+
         $route = (string) config('pages.admin_index.public_route.name', '');
 
         if ($route !== '' && Route::has($route) && filled($this->publicSubjectSlug)) {
@@ -567,5 +611,12 @@ final class PageStructureFlyout extends Component
     private function toastFromResult(ActionResult $result): void
     {
         Flux::toast(variant: $result->success ? 'success' : 'danger', text: $result->message);
+    }
+
+    private function dispatchStructureRefreshIfSuccessful(ActionResult $result): void
+    {
+        if ($result->success) {
+            $this->dispatch('pages-public-structure-updated', reload: false);
+        }
     }
 }

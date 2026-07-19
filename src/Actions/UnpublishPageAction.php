@@ -10,10 +10,13 @@ use IvanBaric\Pages\Actions\Concerns\AuthorizesPageActions;
 use IvanBaric\Pages\Actions\Concerns\ResolvesPageModels;
 use IvanBaric\Pages\Events\PageUnpublished;
 use IvanBaric\Pages\Models\Page;
+use IvanBaric\Pages\Support\PageHierarchy;
 
 final class UnpublishPageAction
 {
     use AuthorizesPageActions, ResolvesPageModels;
+
+    public function __construct(private readonly PageHierarchy $hierarchy) {}
 
     public function handle(Page|string $page): ActionResult
     {
@@ -27,7 +30,7 @@ final class UnpublishPageAction
             return $result;
         }
 
-        DB::transaction(static function () use ($page): void {
+        DB::transaction(function () use ($page): void {
             /** @var Page $lockedPage */
             $lockedPage = $page->newQuery()
                 ->whereKey($page->getKey())
@@ -35,6 +38,15 @@ final class UnpublishPageAction
                 ->firstOrFail();
 
             $lockedPage->unpublish();
+
+            $lockedPage->newQuery()
+                ->whereIn($lockedPage->getKeyName(), $this->hierarchy->descendantIds($lockedPage))
+                ->where('is_published', true)
+                ->update([
+                    'is_published' => false,
+                    'status' => config('pages.default_status', 'draft'),
+                    'published_at' => null,
+                ]);
         });
 
         $page->refresh();

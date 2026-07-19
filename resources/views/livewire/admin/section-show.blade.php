@@ -16,6 +16,7 @@
             <flux:button
                 type="button"
                 variant="primary"
+                data-admin-submit-button
                 x-on:click="saving = true"
                 x-bind:disabled="saving"
                 wire:click="$dispatch('pages-save-section-editor')"

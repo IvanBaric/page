@@ -34,6 +34,19 @@ final class PublishPageAction
             return $result;
         }
 
+        $ancestor = $page->parent;
+        $visited = [];
+
+        while ($ancestor instanceof Page && ! isset($visited[(string) $ancestor->getKey()])) {
+            $visited[(string) $ancestor->getKey()] = true;
+
+            if (! $ancestor->isPublished()) {
+                return ActionResult::error(__('Prije ove stranice objavite sve njezine nadređene stranice.'));
+            }
+
+            $ancestor = $ancestor->parent;
+        }
+
         DB::transaction(static function () use ($page): void {
             /** @var Page $lockedPage */
             $lockedPage = $page->newQuery()
