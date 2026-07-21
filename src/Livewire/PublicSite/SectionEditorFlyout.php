@@ -19,8 +19,11 @@ final class SectionEditorFlyout extends Component
     #[Locked]
     public ?string $sectionUuid = null;
 
+    #[Locked]
+    public string $editorTab = '';
+
     #[On('pages-open-public-section-editor')]
-    public function openSectionEditor(string $sectionUuid): void
+    public function openSectionEditor(string $sectionUuid, string $editorTab = ''): void
     {
         $this->cancelSectionEditor();
 
@@ -28,15 +31,18 @@ final class SectionEditorFlyout extends Component
 
         $section = $this->findAuthorizedSection($sectionUuid);
         $this->sectionUuid = (string) $section->getAttribute('uuid');
+        $this->editorTab = trim($editorTab);
 
         unset($this->section, $this->editorComponent);
 
         Flux::modal('public-section-editor')->show();
+        $this->dispatch('pages-select-section-editor-tab', tab: $this->editorTab);
     }
 
     public function cancelSectionEditor(): void
     {
         $this->sectionUuid = null;
+        $this->editorTab = '';
         unset($this->section, $this->editorComponent);
     }
 
@@ -48,8 +54,7 @@ final class SectionEditorFlyout extends Component
         }
 
         $this->dispatch('pages-public-section-updated.'.$sectionUuid);
-        Flux::modal('public-section-editor')->close();
-        $this->cancelSectionEditor();
+        unset($this->section, $this->editorComponent);
     }
 
     #[Computed]

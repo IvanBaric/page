@@ -81,7 +81,7 @@ class ConfiguredItemsEditor extends Component
     /** @var array<string, array<int, array<string, mixed>>> */
     private array $resolvedFieldOptions = [];
 
-    public function mount(Section $section): void
+    public function mount(Section $section, ?string $initialTab = null): void
     {
         $this->section = $section;
         $sectionModel = PagesModels::section();
@@ -94,7 +94,6 @@ class ConfiguredItemsEditor extends Component
         $this->layoutVariant = $this->normalizeLayoutVariant(
             data_get($settings, $this->layoutSettingsPath(), $this->layoutDefault()),
         );
-        $this->tab = $this->validTabKey($this->tab);
         $this->originalGalleryContentSource = (string) data_get($settings, 'content_source', '');
         $this->sectionTitle = $this->section->localized('title');
         $this->sectionDescription = $this->section->localized('description') ?: null;
@@ -103,6 +102,13 @@ class ConfiguredItemsEditor extends Component
         $this->sectionShowInNavigation = (bool) data_get($settings, 'show_in_navigation', false);
         $this->sectionNavigationLabel = filled(data_get($settings, 'navigation_label')) ? (string) data_get($settings, 'navigation_label') : null;
         $this->loadInlineItemForm();
+        $this->tab = $this->validTabKey(filled($initialTab) ? (string) $initialTab : $this->tab);
+    }
+
+    #[On('pages-select-section-editor-tab')]
+    public function selectEditorTab(string $tab): void
+    {
+        $this->tab = $this->validTabKey($tab);
     }
 
     public function hydrate(): void
@@ -212,6 +218,7 @@ class ConfiguredItemsEditor extends Component
 
         if ($showToast) {
             $this->toastFromResult($result);
+            $this->dispatchSectionEditorSavedIfSuccessful($result);
         }
 
         $this->dispatchPublicSectionRefreshIfSuccessful($result);
@@ -489,6 +496,15 @@ class ConfiguredItemsEditor extends Component
     {
         if ($this->resultSuccessful($result)) {
             $this->dispatchPublicSectionRefresh();
+        }
+    }
+
+    private function dispatchSectionEditorSavedIfSuccessful(CorexisActionResult $result): void
+    {
+        $sectionUuid = (string) $this->section->getAttribute('uuid');
+
+        if ($this->resultSuccessful($result) && $sectionUuid !== '') {
+            $this->dispatch('pages-section-editor-saved', sectionUuid: $sectionUuid);
         }
     }
 

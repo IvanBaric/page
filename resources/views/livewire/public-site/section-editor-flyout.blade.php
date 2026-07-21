@@ -28,15 +28,17 @@
                             variant="primary"
                             size="sm"
                             data-admin-submit-button
-                            x-on:click="saving = true"
-                            x-bind:disabled="saving"
+                            class="relative isolate overflow-hidden"
+                            x-on:click="if (saving) return; saving = true"
+                            x-bind:aria-disabled="saving ? 'true' : 'false'"
+                            x-bind:class="{ 'pointer-events-none': saving }"
                             wire:click="$dispatch('pages-save-section-editor')"
                         >
-                            <span x-show="! saving" class="inline-flex items-center gap-2">
+                            <span x-show="! saving" class="relative z-10 inline-flex items-center gap-2">
                                 <flux:icon name="check" class="size-4 shrink-0" />
                                 <span>{{ __('Spremi') }}</span>
                             </span>
-                            <span x-cloak x-show="saving" class="inline-flex items-center gap-2">
+                            <span x-cloak x-show="saving" class="relative z-10 inline-flex items-center gap-2 no-underline">
                                 <span class="admin-submit-spinner" aria-hidden="true"></span>
                                 <span>{{ __('Spremanje...') }}</span>
                             </span>
@@ -63,11 +65,11 @@
                     </div>
 
                     <div x-bind:class="{ 'admin-panel-content-loading': saving }">
-                        <livewire:dynamic-component
-                            :component="$this->editorComponent"
-                            :section="$this->section"
-                            :key="'public-section-editor-'.$this->section->uuid"
-                        />
+                        @livewire(
+                            $this->editorComponent,
+                            ['section' => $this->section, 'initialTab' => $editorTab],
+                            key('public-section-editor-'.$this->section->uuid.'-'.$editorTab)
+                        )
                     </div>
                 </div>
             </div>

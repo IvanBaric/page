@@ -13,8 +13,6 @@
     wire:submit="saveItem"
     wire:loading.class="admin-panel-content-loading"
     wire:target="saveItem,saveAllChanges"
-    x-data="{ mediaUploading: false }"
-    x-on:admin-media-upload-state="mediaUploading = $event.detail.uploading"
     @class(['relative min-w-0', 'space-y-8' => ! $inlineForm, 'space-y-6' => $inlineForm])
 >
     <x-admin-ui::loading-overlay target="saveItem,saveAllChanges" :text="__('Spremanje...')" />
@@ -161,7 +159,7 @@
                     <flux:button type="button" variant="ghost">{{ __('Odustani') }}</flux:button>
                 </flux:modal.close>
             @endif
-            <x-admin-ui::submit-button target="saveItem" x-bind:disabled="mediaUploading">{{ $submitLabel }}</x-admin-ui::submit-button>
+            <x-admin-ui::submit-button target="saveItem,form.imageUpload">{{ $submitLabel }}</x-admin-ui::submit-button>
         </div>
     @endunless
 </form>

@@ -55,8 +55,7 @@ final class TemplatePartEditorFlyout extends Component
         }
 
         $this->dispatch('pages-public-template-part-updated.'.$this->part);
-        Flux::modal('public-template-part-editor')->close();
-        $this->cancelTemplatePartEditor();
+        unset($this->model);
     }
 
     #[Computed]
